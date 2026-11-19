@@ -6,6 +6,8 @@ import type { MediaProviderAdapter } from '@vidstack/react';
 export interface VideoContextType {
   // --- Refs ---
   playerRef: RefObject<any>;
+  autoCaptions: boolean;
+  chooseCaption: (trackId?: string) => void;
   playerContainerRef: RefObject<HTMLDivElement | null>;
   settingsMenuRef: RefObject<HTMLDivElement | null>;
 

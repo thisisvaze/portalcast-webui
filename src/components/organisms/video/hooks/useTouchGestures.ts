@@ -12,7 +12,7 @@ export function useTouchGestures(
   speedBannerRef: RefObject<HTMLDivElement | null>,
   remote: ReturnType<typeof useMediaRemote>
 ) {
-  const { playerRef, controlsVisible, setControlsVisible, handleSkipButtonClick } =
+  const { playerRef, showControlsAndCursor, handleSkipButtonClick } =
     useVideoContext();
 
   const lastTouchTime = useRef(0);
@@ -24,6 +24,7 @@ export function useTouchGestures(
   useEffect(() => {
     return () => {
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      if (singleTapTimeoutRef.current) clearTimeout(singleTapTimeoutRef.current);
     };
   }, []);
 
@@ -55,6 +56,8 @@ export function useTouchGestures(
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    const touchDuration = Date.now() - lastTouchTime.current;
+    lastTouchTime.current = Date.now(); // suppress the compatibility click, even after a hold
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -75,7 +78,6 @@ export function useTouchGestures(
       return;
     }
 
-    const touchDuration = Date.now() - lastTouchTime.current;
     if (touchDuration < 300 && touchStartPosRef.current) {
       const changedTouch = e.changedTouches[0];
       const diffX = Math.abs(changedTouch.clientX - touchStartPosRef.current.x);
@@ -86,11 +88,11 @@ export function useTouchGestures(
         const timeSinceLastTap = now - lastTapReleaseTimeRef.current;
         lastTapReleaseTimeRef.current = now;
 
-        const containerWidth = playerContainerRef.current?.getBoundingClientRect().width || window.innerWidth;
-        const tapX = changedTouch.clientX;
-        const ratio = tapX / containerWidth;
+        const bounds = playerContainerRef.current?.getBoundingClientRect();
+        const ratio = (changedTouch.clientX - (bounds?.left ?? 0)) / (bounds?.width || window.innerWidth);
 
         if (timeSinceLastTap < 300) {
+          lastTapReleaseTimeRef.current = 0;
           // Double Tap!
           if (singleTapTimeoutRef.current) {
             clearTimeout(singleTapTimeoutRef.current);
@@ -111,18 +113,8 @@ export function useTouchGestures(
             clearTimeout(singleTapTimeoutRef.current);
           }
           singleTapTimeoutRef.current = setTimeout(() => {
-            if (ratio >= 0.3 && ratio <= 0.7) {
-              if (player) {
-                if (player.paused) {
-                  player.play().catch(() => {});
-                } else {
-                  player.pause();
-                }
-              }
-            } else {
-              // Single tap on sides toggles controls visibility
-              setControlsVisible(!controlsVisible);
-            }
+            remote.togglePaused();
+            showControlsAndCursor();
             singleTapTimeoutRef.current = null;
           }, 300);
         }

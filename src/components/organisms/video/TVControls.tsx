@@ -101,7 +101,7 @@ export const TVControls = React.memo(() => {
     : '...';
 
   return (
-    <div className="pointer-events-auto absolute bottom-1 left-1 right-1 p-1 text-fg md:bottom-4 md:left-4 md:right-4 md:p-2.5">
+    <div className="absolute bottom-1 left-1 right-1 p-1 text-fg md:bottom-4 md:left-4 md:right-4 md:p-2.5">
       <div className="ui-player-panel rounded-lg p-1 shadow-2xl md:p-2.5">
         <div className="mb-0.5 flex items-center justify-between md:mb-2">
           <div className="flex min-w-0 items-center">

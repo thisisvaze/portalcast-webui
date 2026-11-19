@@ -324,7 +324,7 @@ const TvChannelList = forwardRef<TvChannelListRef, TvChannelListProps>(
             </div>
           )}
 
-          <div className={`flex flex-col gap-0.5 pb-32 ${showWhatsOn ? 'hidden' : ''}`}>
+          {!showWhatsOn && <div className="flex flex-col gap-0.5 pb-32">
             {filteredChannels.length === 0 ? (
               <div className="flex h-64 flex-col items-center justify-center text-fg-subtle">
                 <svg
@@ -358,7 +358,7 @@ const TvChannelList = forwardRef<TvChannelListRef, TvChannelListProps>(
                 />
               ))
             )}
-          </div>
+          </div>}
         </div>
       </div>
     );

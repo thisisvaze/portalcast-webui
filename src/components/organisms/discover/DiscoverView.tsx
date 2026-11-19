@@ -6,7 +6,7 @@ import MediaCard from '@/components/molecules/MediaCard';
 import MediaCardRow from '@/components/organisms/browse/MediaCardRow';
 import RecommendedRow from '@/components/organisms/browse/RecommendedRow';
 import DiscoverFilters, { hasAnyActiveFilter, genreParams, type ActiveDiscoverFilters, type SingleFilterKey } from '@/components/organisms/discover/DiscoverFilters';
-import { getDiscoverBrowse, type HomeRow } from '@/api/endpoints/discover';
+import { getDiscoverBrowse } from '@/api/endpoints/discover';
 import { onSharedDiscoverFiltersPicked, setSharedDiscoverFilters, sharedDiscoverFiltersFor } from '@/utils/sharedDiscoverFilters';
 import { useDiscover } from '@/hooks/useDiscover';
 import { useAnswersUpdated } from '@/hooks/useAnswersUpdated';
@@ -25,30 +25,11 @@ const RECOMMENDED_ROW_LIMIT = 14;
 
 interface DiscoverViewProps {
   onClick: (item: MediaItem) => void;
-  recommendations: MediaItem[];
-  recommendationsBasedOn: string | null;
-  loadingRecommendations: boolean;
-  // The server's prepared personal rows ("Because you watched X", "Top picks for you"...),
-  // shown instead of the single Recommended row when the server has them.
-  homeRows: HomeRow[];
-  // The viewer's genres, most watched first: genre rows follow this order.
-  genreOrder: string[];
+  refreshKey: number;
   // Id of the card currently being resolved (variants check + resolve) —
   // shows a spinner on just that card so a slow click reads as "working" not
   // "broken." Owned by App.tsx since handleDiscoverItemClick lives there.
   loadingItemId?: string | null;
-  // Reports the Movies/Series checkbox state up to App.tsx, whose own
-  // useDiscover() instance owns "Because You Watched" — so that row can be
-  // based on the most-recently-watched title of just the selected type
-  // instead of always the most recent watch overall.
-  onActiveTypeChange?: (type: 'movie' | 'series' | undefined) => void;
-  // Reports this view's ambient-backdrop item pool up to App.tsx, which owns
-  // the single shared AmbientBackdrop instance — see that component's own
-  // comment for why one shared instance instead of one-per-view matters.
-  // App.tsx only ever merges these reports into its running pool, never
-  // replaces it — the backdrop is meant to be one continuous rotation no
-  // section, filter, or remount ever resets (see the merge comment there).
-  onBackdropItemsChange?: (items: MediaItem[]) => void;
   // The Movies / Series tabs (design-system.md, Screens): this view for one type, without the
   // type toggle; a Categories button opens the per-category browse.
   fixedType?: 'movie' | 'series';
@@ -63,14 +44,8 @@ interface DiscoverViewProps {
 
 const DiscoverView: React.FC<DiscoverViewProps> = ({
   onClick,
-  recommendations,
-  recommendationsBasedOn,
-  loadingRecommendations,
-  homeRows,
-  genreOrder,
+  refreshKey,
   loadingItemId,
-  onActiveTypeChange,
-  onBackdropItemsChange,
   fixedType,
   onOpenCategories,
   continueWatching,
@@ -78,6 +53,7 @@ const DiscoverView: React.FC<DiscoverViewProps> = ({
   onOpenMyLibrary,
 }) => {
   const {
+    recommendations, recommendationsBasedOn, loadingRecommendations, homeRows, genreOrder, fetchRecommendations,
     facets,
     fetchFacets,
     whatsNew,
@@ -161,10 +137,10 @@ const DiscoverView: React.FC<DiscoverViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discoverUpdated]);
 
+  const homeUpdated = useAnswersUpdated('/v2/home');
   useEffect(() => {
-    onActiveTypeChange?.(activeType);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeType]);
+    void fetchRecommendations(activeType);
+  }, [activeType, fetchRecommendations, homeUpdated, refreshKey]);
 
   useEffect(() => {
     if (!facets || facets.genres.length === 0) return;
@@ -311,10 +287,6 @@ const DiscoverView: React.FC<DiscoverViewProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeType]);
 
-  // Item pool for the ambient backdrop — whatever's actually on screen right
-  // now: the filtered grid when a filter's active, otherwise a mix of
-  // Recommended/What's New/genre-row items so the backdrop isn't always
-  // anchored to just one row.
   // A title shows once on Home (owner, 2026-10-22): each row keeps only what no row above it has,
   // in the order they are drawn (the server's rows, What's New, then the genre rows).
   const uniqueRows = useMemo(() => {
@@ -342,42 +314,6 @@ const DiscoverView: React.FC<DiscoverViewProps> = ({
   }, []);
   useEffect(() => () => { if (tvHeroTimer.current) clearTimeout(tvHeroTimer.current); }, []);
   const tvDefaultHero = uniqueRows.home.find((r) => r.data.length)?.data[0] ?? uniqueRows.rec[0] ?? uniqueRows.news[0] ?? null;
-
-  const backdropItems = useMemo(() => {
-    if (hasActiveFilter) return filteredItems;
-    return [
-      ...recommendations,
-      ...homeRows.flatMap((r) => r.data),
-      ...whatsNew.items,
-      ...Object.values(genreRows).flatMap((row) => row.items),
-    ];
-  }, [hasActiveFilter, filteredItems, recommendations, homeRows, whatsNew.items, genreRows]);
-
-  // Debounced instead of reporting synchronously on every `backdropItems`
-  // change: each of the ~9 genre rows resolves its own fetch independently
-  // and updates genreRows separately, so a fresh Discover mount recomputes
-  // backdropItems ~9+ times in quick succession as each one lands. A single
-  // rAF only coalesces updates landing within the same frame — genre rows
-  // typically resolve a few ms to a few hundred ms apart (separate network
-  // responses), each one still slipping through as its own report and
-  // re-triggering AmbientBackdrop's reveal crossfade, which read as the
-  // backdrop flickering through several images right after opening Discover.
-  // A short timeout window collapses that whole initial burst into one
-  // report instead. (A too-short window here reintroduces the original
-  // "Maximum update depth exceeded" #185 crash this used to guard against —
-  // keep it above a single frame.)
-  const backdropReportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (backdropReportTimer.current !== null) clearTimeout(backdropReportTimer.current);
-    backdropReportTimer.current = setTimeout(() => {
-      backdropReportTimer.current = null;
-      onBackdropItemsChange?.(backdropItems);
-    }, 400);
-    return () => {
-      if (backdropReportTimer.current !== null) clearTimeout(backdropReportTimer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backdropItems]);
 
   // Keyed on activeType + hasActiveFilter so switching Movies/Series or
   // clearing a filter re-triggers content-transition's fade+scale instead of

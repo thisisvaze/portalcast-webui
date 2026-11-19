@@ -42,6 +42,7 @@ export const SettingsMenu = React.memo(() => {
     addOnlineSubtitle,
     addLocalSubtitleFile,
     clearSubtitleSearch,
+    chooseCaption,
     streamUrl,
     item,
     seriesItem,
@@ -142,10 +143,11 @@ export const SettingsMenu = React.memo(() => {
     if (!pendingLabel) return;
     const opt = captionOptions.find((o) => o.label === pendingLabel);
     if (opt) {
+      chooseCaption(opt.track?.id);
       opt.select();
       setPendingLabel(null);
     }
-  }, [captionOptions, pendingLabel]);
+  }, [captionOptions, pendingLabel, chooseCaption]);
   const addBestMatch = async () => {
     if (bestBusy) return;
     setBestBusy(true);
@@ -289,8 +291,8 @@ export const SettingsMenu = React.memo(() => {
           >
             <span>Captions</span>
             <div className="pc-muted flex items-center">
-              <span className="mr-1 text-xs">
-                {captionOptions.selectedValue === 'off' ? 'Off' : 'On'}
+              <span className="mr-1 max-w-44 truncate text-xs">
+                {captionOptions.selectedTrack?.label || 'Off'}
               </span>
               <ChevronRightIcon className="h-4 w-4" />
             </div>
@@ -451,13 +453,14 @@ export const SettingsMenu = React.memo(() => {
             <ChevronLeftIcon className="mr-1 h-4 w-4" />
             <span>Back</span>
           </button>
-          {captionOptions.map(({ label, value, select }) => (
+          {captionOptions.map(({ label, value, select, track, selected }) => (
             <button
               key={value}
               data-focusable="true"
               data-control="settings-item"
               onClick={() => {
-                select();
+                chooseCaption(track?.id);
+                if (!selected) select(); // Vidstack's "Off" action toggles when it is already off.
                 setIsSettingsMenuOpen(false);
                 setFocusedIndex(0);
               }}

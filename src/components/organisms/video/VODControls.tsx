@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Controls,
   PlayButton,
   TimeSlider,
   Time,
@@ -119,14 +118,14 @@ export const VODControls = React.memo(() => {
 
   return (
     <div
-      className="pointer-events-auto absolute bottom-0 left-0 right-0 px-4 pb-3 pt-24 md:px-14 md:pb-8 md:pt-40"
+      className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-24 md:px-14 md:pb-8 md:pt-40"
       style={{
         // Tall and soft: the picture shows through above the text.
         background:
           'linear-gradient(to top, rgba(0,0,0,calc(0.92 * var(--ui-glass-opacity-scale, 1))) 0%, rgba(0,0,0,calc(0.55 * var(--ui-glass-opacity-scale, 1))) 45%, transparent 100%)',
       }}
     >
-      <Controls.Group className="w-full">
+      <div className="w-full">
         {title && (
           // text-left: the player's own styles centre text. The space below is the buttons' labels
           // (shown above a focused or hovered button), so they never cover the subtitle.
@@ -321,7 +320,7 @@ export const VODControls = React.memo(() => {
             <Time type="current" remainder /> <span>·</span> <Time type="duration" />
           </span>
         </div>
-      </Controls.Group>
+      </div>
     </div>
   );
 });

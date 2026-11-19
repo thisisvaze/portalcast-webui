@@ -24,7 +24,8 @@ const Admin = React.lazy(lazyImport(() => import('@/components/organisms/admin/A
 // Lazy — only needed once playback actually starts, and its tree pulls in
 // the HLS/vidstack player stack, which is one of the heaviest dependencies
 // in the app.
-const VideoPlayer = React.lazy(lazyImport(() => import('@/components/organisms/video/VideoPlayer')));
+import { loadVideoPlayer } from '@/utils/loadVideoPlayer';
+const VideoPlayer = React.lazy(lazyImport(loadVideoPlayer));
 import ConfirmationModal from '@/components/molecules/ConfirmationModal';
 import VariantPickerModal from '@/components/molecules/VariantPickerModal';
 import MainContentGrid from '@/components/organisms/browse/MainContentGrid';
@@ -35,7 +36,6 @@ import CategoryBrowseView from '@/components/organisms/browse/CategoryBrowseView
 import TitleMenu from '@/components/organisms/TitleMenu';
 import { TitleMenuContext, type TitleMenuExtra } from '@/context/TitleMenuContext';
 import { clearResponseCache } from '@/api/responseCache';
-import { useAnswersUpdated } from '@/hooks/useAnswersUpdated';
 import { loadHiddenTitles, clearHiddenTitles } from '@/utils/hiddenTitles';
 import PeopleView from '@/components/organisms/people/PeopleView';
 import SectionChips, { type HomeSection } from '@/components/molecules/SectionChips';
@@ -49,7 +49,6 @@ import MyListView from '@/components/organisms/discover/MyListView';
 const PersonPage = React.lazy(lazyImport(() => import('@/components/organisms/person/PersonPage')));
 
 import { useMediaLibrary, initialContext } from '@/hooks/useMediaLibrary';
-import { useDiscover } from '@/hooks/useDiscover';
 import { useAppNavigation } from '@/hooks/useAppNavigation';
 import { useDiscoverNavigation } from '@/hooks/useDiscoverNavigation';
 import { cleanRecentSearches } from '@/hooks/useSearchController';
@@ -108,7 +107,6 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
     handleClearWatched,
     cwRefreshKey,
     setCwRefreshKey,
-    isPortal,
     addToRecentChannels,
 
     setItems,
@@ -121,25 +119,11 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
     providerKey,
   } = useMediaLibrary(!!detailItem);
 
-  const { recommendations, recommendationsBasedOn, loadingRecommendations, fetchRecommendations, homeRows, genreOrder } = useDiscover();
-
-  // Mirrors DiscoverView's own Movies/Series checkbox state (reported up via
-  // onActiveTypeChange) so "Because You Watched" can be based on the
-  // most-recently-watched title of just that type when the user has
-  // filtered to one — undefined (both selected) keeps the old "most recent
-  // watch overall" behavior.
-  const [discoverActiveType, setDiscoverActiveType] = useState<'movie' | 'series' | undefined>(undefined);
-
-  // Home's rows; again when a stored copy was shown and the server's differs.
-  const homeUpdated = useAnswersUpdated('/v2/home');
-  useEffect(() => {
-    if (user) fetchRecommendations(discoverActiveType);
-  }, [user?.id, discoverActiveType, fetchRecommendations, homeUpdated]);
-
   const {
     history,
     resetHistory,
     streamUrl,
+    playbackType,
     rawStreamUrl,
     currentItem,
     currentSeriesItem,
@@ -165,7 +149,6 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
     contentType,
     totalItemsCount,
     fetchData,
-    isPortal,
     addToRecentChannels,
     setItems,
     setContext,
@@ -369,9 +352,8 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
   // After an action: Home's rows and Continue Watching come again from the server.
   const onTitlesChanged = useCallback(() => {
     clearResponseCache();
-    fetchRecommendations(discoverActiveType);
     setCwRefreshKey((k) => k + 1);
-  }, [fetchRecommendations, discoverActiveType, setCwRefreshKey]);
+  }, [setCwRefreshKey]);
 
   // More Like This on a detail page opens titles the way a person's page does.
   const openTitle = React.useMemo(
@@ -389,8 +371,6 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
             title: currentItem?.title || version.title,
             is_playable_movie: true,
           } as MediaItem,
-          undefined,
-          undefined,
           at
         ),
       loadingItemId: discoverLoadingItemId,
@@ -584,6 +564,7 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
           }
         >
         <VideoPlayer
+          key={playbackType}
           streamUrl={streamUrl}
           rawStreamUrl={rawStreamUrl}
           onBack={closePlayer}
@@ -591,17 +572,17 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
           seasonId={context.seasonId}
           categoryId={context.category}
           context={context}
-          contentType={contentType}
+          contentType={playbackType}
           mediaId={
-            context.movieId ??
-            (contentType === 'movie' && currentItem ? currentItem.id : null)
+            playbackType === 'movie' ? currentItem?.id ?? null
+              : playbackType === 'series' ? currentSeriesItem?.id ?? context.movieId : null
           }
           item={currentItem}
-          seriesItem={currentSeriesItem}
-          channels={contentType === 'tv' ? items : undefined}
-          episodes={episodeSnapshot}
-          channelInfo={contentType === 'tv' ? currentItem : null}
-          previewChannelInfo={contentType === 'tv' ? previewChannel : null}
+          seriesItem={playbackType === 'series' ? currentSeriesItem : null}
+          channels={playbackType === 'tv' ? items : undefined}
+          episodes={playbackType === 'series' ? episodeSnapshot : undefined}
+          channelInfo={playbackType === 'tv' ? currentItem : null}
+          previewChannelInfo={playbackType === 'tv' ? previewChannel : null}
           onNextChannel={handleNextChannel}
           onPrevChannel={handlePrevChannel}
           onChannelSelect={handleItemClick}
@@ -737,14 +718,8 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
                     onOpenCategories={(t) => { setCategoryOnly(null); setCategoryType(t); }}
                     onOpenMyLibrary={(t) => { setCategoryOnly({ id: 'local', title: 'My library' }); setCategoryType(t); }}
                     onClick={handleDiscoverItemClick}
-                    recommendations={recommendations}
-                    recommendationsBasedOn={recommendationsBasedOn}
-                    loadingRecommendations={loadingRecommendations}
-                    homeRows={homeRows}
-                    genreOrder={genreOrder}
+                    refreshKey={cwRefreshKey}
                     loadingItemId={discoverLoadingItemId}
-                    onActiveTypeChange={setDiscoverActiveType}
-                    onBackdropItemsChange={mergeBackdropItems}
                   />
                   </div>
                 </React.Suspense>

@@ -21,6 +21,7 @@ import { useSubtitles } from '@/context/video/useSubtitles';
 import { useCasting } from '@/context/video/useCasting';
 import { useProgressTracking } from '@/context/video/useProgressTracking';
 import { useDownloadActions } from '@/context/video/useDownloadActions';
+import { useAccountCaptions } from './useAccountCaptions';
 
 // Stable fallback references for optional props below — `receivers || []`
 // (etc.) would otherwise create a brand-new array/function on every render
@@ -96,6 +97,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     refreshReceivers,
 }) => {
   const { user, updatePreferences } = useAuth();
+  const { autoCaptions, chooseCaption } = useAccountCaptions();
   const isTizen = isTvApp(); // Samsung or LG
 
   // --- Refs ---
@@ -115,15 +117,12 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
   const [showChannelList, setShowChannelList] = useState(false);
   const [showEpisodeList, setShowEpisodeList] = useState(false);
 
-  const [fitMode, setFitMode] = useState<VideoFitMode>(
-    (user?.preferences?.videoFitMode as VideoFitMode) || 'contain'
-  );
-
-  useEffect(() => {
-    if (user?.preferences?.videoFitMode) {
-      setFitMode(user.preferences.videoFitMode as VideoFitMode);
-    }
-  }, [user]);
+  // Picture size is local to this playback. Reset before the next title paints, even when
+  // switching episodes/channels reuses this provider. Profile refreshes never resize the video.
+  const fitKey = itemId ?? streamUrl ?? rawStreamUrl;
+  const [picture, setPicture] = useState<{ key: typeof fitKey; mode: VideoFitMode }>({ key: fitKey, mode: 'contain' });
+  if (picture.key !== fitKey) setPicture({ key: fitKey, mode: 'contain' });
+  const fitMode = picture.mode;
 
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const settingsOpenRef = useRef(false);
@@ -157,14 +156,6 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     const interval = setInterval(updateLiveTime, 1000);
     return () => clearInterval(interval);
   }, [contentType]);
-
-  useEffect(() => {
-    if (fitMode && user) {
-      if (user.preferences?.videoFitMode !== fitMode) {
-        updatePreferences({ videoFitMode: fitMode });
-      }
-    }
-  }, [fitMode, user, updatePreferences]);
 
   const {
     retryCount,
@@ -259,10 +250,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
 
   // --- Actions ---
   const cycleFitMode = useCallback(() => {
-    const FIT_MODES: VideoFitMode[] = ['contain', 'cover', 'fill'];
-    setFitMode(
-      (curr) => FIT_MODES[(FIT_MODES.indexOf(curr) + 1) % FIT_MODES.length]
-    );
+    setPicture(({ key, mode }) => ({ key, mode: mode === 'contain' ? 'cover' : mode === 'cover' ? 'fill' : 'contain' }));
   }, []);
 
   const toggleSettingsMenu = useCallback(() => {
@@ -299,9 +287,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     if (savedMuted !== undefined) player.muted = savedMuted;
   }, [initialPlaybackState, resetRecoveryState, user]);
 
-  // Persist volume/mute changes per-user so they carry over to the next
-  // title played, mirroring the videoFitMode preference sync below. Debounced
-  // since dragging the volume slider fires this on every step.
+  // Persist volume/mute per user. Dragging the volume slider fires this on every step.
   const volumeSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -367,6 +353,8 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       playerContainerRef,
       settingsMenuRef,
 
+      autoCaptions,
+      chooseCaption,
       controlsVisible,
       cursorVisible,
       copied,
@@ -458,6 +446,8 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       handleMouseMove: showControlsAndCursor,
     }),
     [
+      autoCaptions,
+      chooseCaption,
       controlsVisible,
       cursorVisible,
       copied,

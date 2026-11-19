@@ -26,6 +26,15 @@ media-provider {
   padding: 0 5%;
 }
 
+/* Labels, gradients and blank space let taps reach the picture. */
+.player-chrome[data-visible='true'] :is(button, [role='button'], [data-control='seekbar'], .pc-shade, .pc-panel, .more-options-menu) {
+  pointer-events: auto;
+}
+.player-chrome[data-visible='false'] *,
+.player-chrome.seek-bar-only :is(.top-bar-container, .vod-controls-buttons-row) * {
+  pointer-events: none !important;
+}
+
 /* Styling the actual Subtitle Text Box */
 .media-captions [data-part='cue'] {
   display: inline-block;

@@ -31,6 +31,7 @@ import { createKeptTracker, onlineSubtitleKey } from '@/utils/subtitleKept';
 import { useTVRemoteNavigation } from '@/components/organisms/video/hooks/useTVRemoteNavigation';
 import { useTouchGestures } from '@/components/organisms/video/hooks/useTouchGestures';
 import { useLiveCaptions } from '@/context/video/useLiveCaptions';
+import { catalogueEnglish } from '@/utils/liveCaptions/preference';
 
 const VideoPlayerContent: React.FC = () => {
   const {
@@ -38,6 +39,7 @@ const VideoPlayerContent: React.FC = () => {
     playerContainerRef,
 
     controlsVisible,
+    autoCaptions,
     cursorVisible,
     useProxy,
     showChannelList,
@@ -87,8 +89,13 @@ const VideoPlayerContent: React.FC = () => {
   } = useVideoContext();
 
   const remote = useMediaRemote(playerRef);
-  // Captions → "Live (automatic, English)": speech to text in the browser (utils/liveCaptions).
-  const liveLines = useLiveCaptions(playerRef, streamUrl);
+  const source = useProxy ? streamUrl || rawStreamUrl : rawStreamUrl || streamUrl;
+  const liveGroup = contentType === 'tv'
+    ? channelGroups?.find((g) => String(g.id) === String(channelInfo?.tv_genre_id ?? item?.tv_genre_id))?.title
+    : undefined;
+  const audioInfo = contentType === 'tv' ? channelInfo ?? item : item;
+  const englishAudio = catalogueEnglish(audioInfo, liveGroup, contentType === 'tv' ? audioInfo?.name : undefined);
+  const liveLines = useLiveCaptions(playerRef, source && `${reloadTrigger}:${useProxy}:${source}`, englishAudio, autoCaptions);
 
   // Identity of the playing title, as the server keys catalog items (movie stream id /
   // episode id); live is shown but never reported.
@@ -154,6 +161,9 @@ const VideoPlayerContent: React.FC = () => {
     speedBannerRef,
     remote
   );
+  const fromTouch = (event: React.MouseEvent) =>
+    (event.nativeEvent as MouseEvent & { sourceCapabilities?: { firesTouchEvents: boolean } | null })
+      .sourceCapabilities?.firesTouchEvents ?? (Date.now() - lastTouchTime.current < 500);
 
   // TV Browser unexpected pause / stall recovery listener
   useEffect(() => {
@@ -248,11 +258,6 @@ const VideoPlayerContent: React.FC = () => {
           onTimeUpdate={handleTimeUpdate}
           onError={handleError}
           onEnded={handleEnded}
-          onDoubleClick={() => {
-            const isTouch = Date.now() - lastTouchTime.current < 500;
-            if (isTizen || isTouch) return;
-            remote.toggleFullscreen();
-          }}
           keyDisabled={true}
         >
           <MediaProvider>
@@ -277,15 +282,17 @@ const VideoPlayerContent: React.FC = () => {
             ))}
           </MediaProvider>
 
-          {/* Transparent Gesture Overlay to intercept touches on Vidstack media provider. A click
-              (a mouse, not a touch: touches have their own gestures) plays or pauses. */}
+          {/* The picture and letterbox bars are one tap target, underneath the interactive controls. */}
           <div
             className="absolute inset-0 z-10 touch-none"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
-            onClick={() => {
-              if (isTizen || Date.now() - lastTouchTime.current < 500) return;
+            onClick={(event) => {
+              if (fromTouch(event)) return;
               remote.togglePaused();
+            }}
+            onDoubleClick={(event) => {
+              if (!isTizen && !fromTouch(event)) remote.toggleFullscreen();
             }}
           />
 
@@ -317,16 +324,12 @@ const VideoPlayerContent: React.FC = () => {
           {contentType !== 'tv' && <PlayPauseFlash />}
 
           <div
-            className={`pointer-events-none absolute inset-0 z-20 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'} ${seekOverlay?.isLeftRight ? 'seek-bar-only' : ''}`}
+            data-visible={controlsVisible}
+            className={`player-chrome pointer-events-none absolute inset-0 z-20 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'} ${seekOverlay?.isLeftRight ? 'seek-bar-only' : ''}`}
             onClick={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
           >
-            <TopBar onBack={onBack} />
-            {videoStats && (
-              <div className="ui-player-badge absolute right-4 top-16 rounded-md bg-black/60 px-3 py-1 text-xs font-semibold tracking-wide text-fg md:right-6 md:top-20 md:text-sm">
-                {videoStats}
-              </div>
-            )}
+            <TopBar onBack={onBack} stats={videoStats} />
 
             {contentType === 'tv' ? (
               <TVControls />

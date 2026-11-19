@@ -12,6 +12,9 @@ import type { MediaItem, ContextType } from '@/types';
 import { initialContext } from './useMediaLibrary';
 import { resolveStreamUrl } from './resolveStreamUrl';
 import { useNavigationHistory } from './useNavigationHistory';
+import { warmVideoPlayer } from '@/utils/loadVideoPlayer';
+
+const CHANNEL_SETTLE_MS = 350;
 
 function getResumeTime(): number | undefined {
   return undefined;
@@ -26,7 +29,6 @@ export function useAppNavigation(
     context: ContextType,
     typeOverride?: 'movie' | 'series' | 'tv'
   ) => void,
-  isPortal: boolean,
   addToRecentChannels: (item: MediaItem) => void,
   setItems: React.Dispatch<React.SetStateAction<MediaItem[]>>,
   setContext: React.Dispatch<React.SetStateAction<ContextType>>,
@@ -45,6 +47,8 @@ export function useAppNavigation(
   const { user, updatePreferences } = useAuth();
 
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  // Home/Continue Watching and cast playback can start over any library tab.
+  const [playbackType, setPlaybackType] = useState<ContextType['contentType']>('movie');
   const [rawStreamUrl, setRawStreamUrl] = useState<string | null>(null);
   const [currentItem, setCurrentItem] = useState<MediaItem | null>(null);
   const [currentSeriesItem, setCurrentSeriesItem] = useState<MediaItem | null>(
@@ -74,6 +78,10 @@ export function useAppNavigation(
   }, [streamUrl]);
 
   const channelChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (channelChangeTimer.current) clearTimeout(channelChangeTimer.current);
+    channelChangeTimer.current = null;
+  }, [streamUrl]);
 
   const {
     history,
@@ -114,7 +122,8 @@ export function useAppNavigation(
   });
 
   const openPlayer = useCallback(
-    (item: MediaItem, raw: string, proxied: string, resumeTime?: number) => {
+    (type: ContextType['contentType'], item: MediaItem, raw: string, proxied: string, resumeTime?: number) => {
+      setPlaybackType(type);
       setCurrentItem(item);
       setRawStreamUrl(raw);
       setStreamUrl(proxied);
@@ -127,6 +136,7 @@ export function useAppNavigation(
 
   const playContinueWatching = useCallback(
     async (item: MediaItem) => {
+      warmVideoPlayer();
       let savedResumeTime: number | undefined;
       try {
         const records = await getUserProgress();
@@ -217,7 +227,7 @@ export function useAppNavigation(
           .catch((e) => console.error('Failed to load episode list for Next/Prev Episode:', e));
       }
 
-      setCurrentItem({
+      const resumeItem = {
         ...item,
         title: item.title || item.name,
         name: item.name || item.title,
@@ -233,7 +243,7 @@ export function useAppNavigation(
         // (falls back to the CW item's own id), so autoplay/"next episode"
         // can't resolve an adjacent episode until the user manually picks one.
         _episodeCardId: (item as any)._episodeCardId || (item as any).cw_episode_card_id || item.id,
-      } as MediaItem);
+      } as MediaItem;
 
       const urlParams: Record<string, any> = { id: playbackId };
       if (item.series_number !== undefined) {
@@ -251,13 +261,9 @@ export function useAppNavigation(
       if (typeof freshCmd !== 'string')
         throw new Error('Fresh stream URL not found.');
 
-      setRawStreamUrl(freshCmd);
-      setStreamUrl(freshCmd);
-      setResumePlaybackState(
-        savedResumeTime ? { currentTime: savedResumeTime } : undefined
-      );
+      openPlayer(isEpisodeCWT ? 'series' : 'movie', resumeItem, freshCmd, freshCmd, savedResumeTime);
     },
-    [context, fetchData, focusedIndex, items, totalItemsCount, detailItem, showDiscover, variantPickerItem, variantPickerOptions, setHistory, isFromContinueWatching]
+    [contentType, context, focusedIndex, items, totalItemsCount, detailItem, showDiscover, variantPickerItem, variantPickerOptions, setHistory, isFromContinueWatching, openPlayer]
   );
 
   const playChannel = useCallback(
@@ -285,7 +291,7 @@ export function useAppNavigation(
         },
       });
       addToRecentChannels(item);
-      openPlayer(item, channelUrl, channelUrl);
+      openPlayer('tv', item, channelUrl, channelUrl);
       return true;
     },
     [addToRecentChannels, openPlayer, updatePreferences, user?.preferences?.lastSelectedCategory]
@@ -293,12 +299,8 @@ export function useAppNavigation(
 
   const startPlayback = useCallback(
     // resumeAt: a movie starts there (another version of the one playing, from the same place).
-    async (item: MediaItem, startTime?: number, endTime?: number, resumeAt?: number) => {
-      if (contentType === 'tv') {
-        playChannel(item, startTime, endTime);
-        return;
-      }
-
+    async (item: MediaItem, resumeAt?: number) => {
+      warmVideoPlayer();
       if (item.is_episode) {
         try {
           // Prefer the episode's own series/season ids over the ambient
@@ -356,7 +358,7 @@ export function useAppNavigation(
               .catch((e) => console.error('Failed to load episode list for Next/Prev Episode:', e));
           }
 
-          openPlayer(enrichedItem as any, raw, proxied, getResumeTime());
+          openPlayer('series', enrichedItem, raw, proxied, getResumeTime());
         } catch (err) {
           console.error(err);
           toast.error('Could not fetch stream URL.');
@@ -364,80 +366,39 @@ export function useAppNavigation(
         return;
       }
 
-      const isInsideMovieCategory =
-        contentType === 'movie' && context.category !== null;
-
-      if (isInsideMovieCategory || item.is_playable_movie) {
-        try {
-          // item.cmd already present means this item was already resolved to
-          // a specific playable file — e.g. Discover's openDiscoverItem
-          // already did a getMedia() lookup to build detailItem, and its .id
-          // (item.id here) is that FILE's own id, not a catalog movieId. This
-          // second getMedia lookup was re-querying the category-LISTING
-          // endpoint with that file id, which was never a valid lookup key
-          // there (confirmed via real traffic — it came back empty/wrong
-          // regardless of which category was tried). resolveStreamUrl always
-          // calls movie-link with the item's own id regardless (no item.cmd
-          // shortcut, see its own top comment) — for an already-resolved
-          // item that's exactly what's needed, so skip straight to it instead
-          // of re-deriving the same file via a lookup that doesn't work for
-          // file-level ids. Only bare listing-grid clicks (no cmd yet) still
-          // need this lookup at all.
-          let movieFile = item;
-          if (!item.cmd) {
-            const res = await getMedia({
-              movieId: item.id,
-              category: item.category_id ? String(item.category_id) : (context.category || '*'),
-            });
-            if (!res.data?.length) throw new Error('No movie files returned.');
-            movieFile = res.data[0];
-          }
-
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { id, cmd, ...filteredItem } = item;
-          // ContentMeta's own id for this title ("movie_{id}") — same
-          // convention Discover's own click flow (App.tsx openDiscoverItem)
-          // already stamps on, needed so "Because You Watched" can look this
-          // title back up later (see VideoContext.tsx's saveProgress). Without
-          // this, only Discover-originated plays carried a catalogId, so
-          // whenever the most recently watched title was played from the
-          // regular Movies grid instead, recommendations' title lookup missed
-          // and fell back to a blank "Because You Watched".
-          const finalMovieItem = { ...movieFile, ...filteredItem, catalogId: item.catalogId || `movie_${id}` };
-
-          // movieFile is a resolved file/quality variant, same issue as the
-          // episode case above — use the real movie item's title, not the
-          // variant's own name (often just a quality/language descriptor).
-          const movieTitle = item.title || item.name;
-          const movieCategory = item.genres_str || item.category_id;
-          // The catalog (list) id for broken-stream tracking: an already-
-          // resolved item's own id is a FILE id, so prefer its catalogId.
-          const listItemId = item.catalogId
-            ? String(item.catalogId).replace(/^movie_/, '')
-            : item.cmd
-              ? undefined
-              : item.id;
-          const { raw, proxied } = await resolveStreamUrl(
-            movieFile,
-            undefined,
-            {
-              title: movieTitle,
-              category: movieCategory ? String(movieCategory) : undefined,
-            },
-            { itemId: listItemId, itemType: 'movie' }
-          );
-          openPlayer(finalMovieItem, raw, proxied, resumeAt ?? getResumeTime());
-        } catch (err) {
-          console.error(err);
-          toast.error('Could not fetch stream details.');
+      // This path is only called for titles. Live channel actions go directly to playChannel.
+      try {
+        // Discover already resolves a card to a file (cmd present); that file id isn't a
+        // valid category-listing id. Only unresolved cards need the extra lookup.
+        let movieFile = item;
+        if (!item.cmd) {
+          const res = await getMedia({
+            movieId: item.id,
+            category: item.category_id ? String(item.category_id) : (context.category || '*'),
+          });
+          if (!res.data?.length) throw new Error('No movie files returned.');
+          movieFile = res.data[0];
         }
-        return;
+        // Preserve the playable file's id/cmd, but the title's name, category and catalog id
+        // for the player, watch history and recommendations (not the file's quality label).
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id, cmd, ...filteredItem } = item;
+        const finalMovieItem = { ...movieFile, ...filteredItem, catalogId: item.catalogId || `movie_${id}` };
+        const movieCategory = item.genres_str || item.category_id;
+        const listItemId = item.catalogId ? String(item.catalogId).replace(/^movie_/, '') : item.cmd ? undefined : id;
+        const { raw, proxied } = await resolveStreamUrl(
+          movieFile,
+          undefined,
+          { title: item.title || item.name, category: movieCategory ? String(movieCategory) : undefined },
+          { itemId: listItemId, itemType: 'movie' }
+        );
+        openPlayer('movie', finalMovieItem, raw, proxied, resumeAt ?? getResumeTime());
+      } catch (err) {
+        console.error(err);
+        toast.error('Could not fetch stream details.');
       }
     },
     [
-      contentType,
-      isPortal,
-      playChannel,
       openPlayer,
       context,
       currentSeriesItem,
@@ -446,9 +407,6 @@ export function useAppNavigation(
 
   const handleItemClick = useCallback(
     async (item: MediaItem) => {
-      if (contentType === 'tv' && streamUrl && currentItem?.id === item.id)
-        return;
-
       if (channelChangeTimer.current) {
         clearTimeout(channelChangeTimer.current);
         channelChangeTimer.current = null;
@@ -464,6 +422,11 @@ export function useAppNavigation(
           console.error(err);
           toast.error('Link expired or server busy.');
         }
+        return;
+      }
+
+      if (contentType === 'tv' && !item.is_episode && !item.is_playable_movie && !item.is_series && !item.is_season && item.type !== 'movie') {
+        if (!(streamUrl && playbackType === 'tv' && currentItem?.id === item.id)) playChannel(item);
         return;
       }
 
@@ -516,7 +479,7 @@ export function useAppNavigation(
         item.is_episode ||
         isInsideMovieCategory ||
         item.is_playable_movie ||
-        contentType === 'tv';
+        item.type === 'movie';
       if (isPlayable) {
         // Episodes are selected from the expandable episode row inside the series page
         // (which already shows their details) — pressing Play there should go straight
@@ -572,6 +535,8 @@ export function useAppNavigation(
       context,
       currentItem,
       currentSeriesItem,
+      playbackType,
+      playChannel,
       fetchData,
       playContinueWatching,
       pushFrame,
@@ -598,8 +563,10 @@ export function useAppNavigation(
       castRawStreamUrl?: string,
       castContentType?: 'movie' | 'series' | 'tv'
     ) => {
+      setPlaybackType(castContentType ?? (media.is_episode || media.type === 'series' ? 'series'
+        : media.is_playable_movie || media.type === 'movie' ? 'movie' : media.tv_genre_id != null ? 'tv' : 'movie'));
       setCurrentItem(media);
-      if (castRawStreamUrl) setRawStreamUrl(castRawStreamUrl);
+      setRawStreamUrl(castRawStreamUrl ?? castStreamUrl ?? null);
       if (castContentType) {
         setContext((prev) => ({ ...prev, contentType: castContentType }));
       }
@@ -610,8 +577,6 @@ export function useAppNavigation(
 
   const debounceChannelChange = useCallback(
     (direction: 'next' | 'prev') => {
-      if (channelChangeTimer.current) clearTimeout(channelChangeTimer.current);
-
       const activeChannel = previewChannel || currentItem;
       if (!activeChannel) return;
 
@@ -625,6 +590,7 @@ export function useAppNavigation(
 
       if (newIndex === currentIndex) return;
 
+      if (channelChangeTimer.current) clearTimeout(channelChangeTimer.current);
       const nextChannel = items[newIndex];
       setPreviewChannel(nextChannel);
 
@@ -632,7 +598,7 @@ export function useAppNavigation(
         handleItemClick(nextChannel);
         setPreviewChannel(null);
         channelChangeTimer.current = null;
-      }, 2000);
+      }, CHANNEL_SETTLE_MS);
     },
     [currentItem, handleItemClick, items, previewChannel]
   );
@@ -657,6 +623,7 @@ export function useAppNavigation(
     history,
     resetHistory,
     streamUrl,
+    playbackType,
     rawStreamUrl,
     currentItem,
     currentSeriesItem,

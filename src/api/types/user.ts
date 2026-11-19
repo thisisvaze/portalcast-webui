@@ -11,6 +11,7 @@ export interface User {
     favorites?: string[];
     recentChannels?: string[];
     videoFitMode?: string;
+    autoEnglishCaptions?: boolean;
     volume?: number;
     muted?: boolean;
     lastSelectedCategory?: Record<string, string>;
