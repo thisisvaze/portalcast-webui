@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
-import { TextTrack } from '@vidstack/react';
+import { TextTrack, type MediaPlayerInstance } from '@vidstack/react';
 import { toast } from 'react-toastify';
 import { liveCaptionsSupported, startLiveCaptions } from '@/utils/liveCaptions';
 
@@ -10,7 +10,7 @@ const TOAST = 'live-captions';
  * (utils/liveCaptions) as captions, the last two lines on screen like a broadcast's. Nothing loads
  * until it is picked. Follows the player to the next channel or title (`sourceKey`).
  */
-export function useLiveCaptions(playerRef: RefObject<any>, sourceKey: string | null | undefined) {
+export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>, sourceKey: string | null | undefined) {
   // Picked on one channel, still on after zapping to the next.
   const wanted = useRef(false);
 
@@ -27,7 +27,7 @@ export function useLiveCaptions(playerRef: RefObject<any>, sourceKey: string | n
     const shown: VTTCue[] = [];
 
     const onText = (text: string) => {
-      const at = player.currentTime as number;
+      const at = player.currentTime;
       const words = text.split(/\s+/).length;
       const cue = new VTTCue(at, at + Math.min(8, Math.max(3, words * 0.45)), text);
       track.addCue(cue as never);
