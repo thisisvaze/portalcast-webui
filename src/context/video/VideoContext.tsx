@@ -187,7 +187,6 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     handleEnded,
     playNextEpisode,
     playPrevEpisode,
-    hasRestoredProgress,
   } = useProgressTracking({
     playerRef,
     contentType,
@@ -201,7 +200,6 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     episodes,
     onEpisodeSelect,
     onLoadMoreEpisodes,
-    initialPlaybackState,
     streamUrl,
     resetRecoveryState,
   });
@@ -291,10 +289,9 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     (newProxyState: boolean) => {
       saveProgress();
       setUseProxy(newProxyState);
-      hasRestoredProgress.current = false;
       setReloadTrigger((prev) => prev + 1);
     },
-    [saveProgress, setReloadTrigger, hasRestoredProgress]
+    [saveProgress, setReloadTrigger]
   );
 
   useEffect(() => {
