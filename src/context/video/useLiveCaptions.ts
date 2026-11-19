@@ -1,18 +1,23 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { TextTrack, type MediaPlayerInstance } from '@vidstack/react';
 import { toast } from 'react-toastify';
 import { liveCaptionsSupported, startLiveCaptions } from '@/utils/liveCaptions';
+import { captionLines } from '@/utils/liveCaptions/lines';
 
 const TOAST = 'live-captions';
 
 /**
  * "Live (automatic, English)" in the player's Captions menu: picked, it writes down what is said
- * (utils/liveCaptions) as captions, the last two lines on screen like a broadcast's. Nothing loads
- * until it is picked. Follows the player to the next channel or title (`sourceKey`).
+ * (utils/liveCaptions). Returns the lines to show (null: none), drawn by the player itself: two
+ * lines of at most 42 characters, words added as they are said, older ones rolling off the top.
+ * The track only stands for the menu entry: cues through it were not removed reliably (the
+ * player mirrors tracks into the browser's, which threw on removal, so old lines piled up).
+ * Nothing loads until it is picked. Follows the player to the next channel or title (`sourceKey`).
  */
-export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>, sourceKey: string | null | undefined) {
+export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>, sourceKey: string | null | undefined): string[] | null {
   // Picked on one channel, still on after zapping to the next.
   const wanted = useRef(false);
+  const [lines, setLines] = useState<string[] | null>(null);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -24,32 +29,29 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
     let stop: (() => void) | null = null;
     let starting = false;
     let disposed = false;
-    // On screen: the last settled line, then the line being said. A line stays until newer speech
-    // replaces it, and all go after a quiet spell.
-    const settled: VTTCue[] = [];
-    let saying: VTTCue | null = null;
+    // What has been said (settled, the last few hundred characters) and the line being said.
+    let said = '';
+    let saying = '';
     let quiet: ReturnType<typeof setTimeout> | undefined;
-    const LONG = 3600; // a cue's end: it is removed, never timed out
+    const show = () => setLines(captionLines(`${said} ${saying}`.trim()));
 
     const onText = (text: string, final: boolean) => {
-      const at = player.currentTime;
-      if (saying) track.removeCue(saying as never);
-      saying = new VTTCue(at, at + LONG, text);
-      track.addCue(saying as never);
       if (final) {
-        settled.push(saying);
-        saying = null;
+        said = `${said} ${text}`.trim().slice(-300);
+        saying = '';
+      } else {
+        saying = text;
       }
-      while (settled.length + (saying ? 1 : 0) > 2) track.removeCue(settled.shift() as never);
+      show();
       clearTimeout(quiet);
       quiet = setTimeout(clear, 7000);
     };
 
     const clear = () => {
       clearTimeout(quiet);
-      for (const cue of settled.splice(0)) track.removeCue(cue as never);
-      if (saying) track.removeCue(saying as never);
-      saying = null;
+      said = '';
+      saying = '';
+      setLines(null);
     };
 
     const halt = () => {
@@ -110,4 +112,6 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
       player.textTracks.remove(track);
     };
   }, [playerRef, sourceKey]);
+
+  return lines;
 }

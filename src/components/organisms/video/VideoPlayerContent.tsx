@@ -87,7 +87,7 @@ const VideoPlayerContent: React.FC = () => {
 
   const remote = useMediaRemote(playerRef);
   // Captions → "Live (automatic, English)": speech to text in the browser (utils/liveCaptions).
-  useLiveCaptions(playerRef, streamUrl);
+  const liveLines = useLiveCaptions(playerRef, streamUrl);
 
   // Identity of the playing title, as the server keys catalog items (movie stream id /
   // episode id); live is shown but never reported.
@@ -295,6 +295,22 @@ const VideoPlayerContent: React.FC = () => {
                 : 'bottom-10 md:bottom-12'
             }`}
           />
+
+          {/* Live captions (useLiveCaptions): two lines at most, the newest words. */}
+          {liveLines && liveLines.length > 0 && (
+            <div
+              aria-live="polite"
+              className={`pointer-events-none absolute inset-x-0 z-10 flex flex-col items-center gap-1 px-4 text-center transition-[bottom] duration-300 ease-in-out ${
+                controlsVisible ? 'bottom-32 md:bottom-40' : 'bottom-10 md:bottom-12'
+              }`}
+            >
+              {liveLines.map((line, i) => (
+                <span key={i} className="rounded-md bg-black/75 px-2.5 py-0.5 text-lg font-medium leading-snug text-white md:text-2xl">
+                  {line}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Outside the fading controls: it shows whether they are up or not. */}
           {contentType !== 'tv' && <PlayPauseFlash />}

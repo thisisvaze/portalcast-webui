@@ -21,6 +21,7 @@ const SPEECH_PAD = 80 * PER_MS; // kept before a piece
 const MIN_SPEECH = 250 * PER_MS; // shorter pieces are dropped
 const MAX_PIECE = 6 * SAMPLE_RATE; // cut here even without a pause (commentary rarely pauses)
 const PARTIAL_EVERY = 0.8 * SAMPLE_RATE; // read the piece so far again after this much more audio
+const FIRST_PARTIAL = 1.2 * SAMPLE_RATE; // not before this much speech: shorter reads are guesses ("A")
 const PREV_BUFFERS = Math.ceil(SPEECH_PAD / 512);
 
 const post = (message: unknown) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(message);
@@ -97,7 +98,8 @@ async function read(audio: Float32Array, final: boolean, id: number) {
   const text = (Array.isArray(out) ? out[0]?.text : out.text)?.trim() ?? '';
   post({ type: 'stats', kind: final ? 'final' : 'partial', seconds: +(audio.length / SAMPLE_RATE).toFixed(2), ms: Math.round(performance.now() - t0), text });
   if (!final && id !== pieceId) return; // the piece already ended: its final says it
-  if (text) post({ type: 'text', text, final });
+  // A letter or two on its own is noise read as speech, not a word.
+  if ((text.match(/\p{L}/gu) ?? []).length >= 2) post({ type: 'text', text, final });
 }
 
 function finish() {
@@ -142,7 +144,7 @@ self.onmessage = async (event: MessageEvent<{ buffer: Float32Array }>) => {
     speaking = true;
     silence = 0;
     // Words as they are said: read the piece so far again, one read at a time.
-    if (sinceRead >= PARTIAL_EVERY && !reading && length >= MIN_SPEECH) {
+    if (sinceRead >= PARTIAL_EVERY && !reading && length >= FIRST_PARTIAL) {
       sinceRead = 0;
       reading = true;
       void read(audioSoFar(), false, pieceId).finally(() => {
