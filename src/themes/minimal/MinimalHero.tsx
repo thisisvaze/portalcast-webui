@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, useMotionValue, useReducedMotion } from 'motion/react';
-import { Info, Play } from 'lucide-react';
+import { Info } from 'lucide-react';
+import PlaybackButton from '@/components/ui/PlaybackButton';
 import ActivityIndicator from '@/components/ui/ActivityIndicator';
 import type { ContinueHeroProps } from '@/components/organisms/browse/ContinueHero';
 import { useContinueHero } from '@/components/organisms/browse/useContinueHero';
@@ -76,18 +77,7 @@ const MinimalHero: React.FC<ContinueHeroProps> = ({ progressRecords, onResume })
             {detail && <span className="truncate text-sm text-white/70">{detail}</span>}
           </div>
           <div className="mt-1 flex items-center gap-3">
-            <motion.button
-              type="button"
-              onClick={() => onResume(item)}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.96 }}
-              transition={snappy}
-              data-focusable="true"
-              className={`${heroButton} bg-white text-black`}
-            >
-              <Play size={18} className="fill-current" />
-              Resume
-            </motion.button>
+            <PlaybackButton onClick={() => onResume(item)}>Resume</PlaybackButton>
             {openDetails && (
               <motion.button
                 type="button"
@@ -96,7 +86,7 @@ const MinimalHero: React.FC<ContinueHeroProps> = ({ progressRecords, onResume })
                 whileTap={{ scale: 0.96 }}
                 transition={snappy}
                 data-focusable="true"
-                className={`${heroButton} bg-white/15 text-white backdrop-blur-md hover:bg-white/25`}
+                className={`${heroButton} minimal-glass-action text-white backdrop-blur-md`}
               >
                 {detailsLoading ? <ActivityIndicator className="text-lg" /> : <Info size={18} />}
                 Details
