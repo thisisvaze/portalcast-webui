@@ -7,8 +7,8 @@ import { isTvApp } from '@/utils/helpers';
 export interface LiveCaptionHandlers {
   /** final false: the line being said, so far (it is replaced); true: that line, settled. */
   onText: (text: string, final: boolean) => void;
-  /** 'loading': first time, the models download (about 150 MB, then cached). */
-  onStatus: (status: 'loading' | 'ready', device: 'webgpu' | 'wasm') => void;
+  /** 'loading': the first time, the model downloads (`size`, then cached). */
+  onStatus: (status: 'loading' | 'ready', device: 'webgpu' | 'wasm', model: string, size?: string) => void;
   onError: (message: string) => void;
 }
 
@@ -94,7 +94,8 @@ export async function startLiveCaptions(media: HTMLMediaElement, handlers: LiveC
     if (m.type === 'text') handlers.onText(m.text, m.final);
     else if (m.type === 'status') {
       if (m.status === 'ready') device = m.device;
-      handlers.onStatus(m.status, m.device);
+      console.info(`[live-captions] ${m.status}: ${m.model} on the ${m.device === 'webgpu' ? 'GPU' : 'CPU'}`);
+      handlers.onStatus(m.status, m.device, m.model, m.size);
     } else if (m.type === 'stats') {
       // The console's record of each read: how much audio, how long it took, on what.
       console.info(`[live-captions] ${m.kind} ${m.seconds}s → ${m.ms} ms (${device === 'webgpu' ? 'GPU' : 'CPU'}) ${JSON.stringify(m.text)}`);

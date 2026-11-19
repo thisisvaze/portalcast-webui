@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
-// Live captions, in the browser (index.ts starts it): Silero VAD finds speech, Moonshine (English)
-// writes it down. Adapted from Hugging Face's moonshine-web example
+// Live captions, in the browser (index.ts starts it): Silero VAD finds speech and a model writes it
+// down: Whisper large-v3 turbo where the GPU can run it in half precision (far better on films and
+// crowd noise), else Moonshine base (small and quick: phones, older machines, the CPU). Adapted from Hugging Face's moonshine-web example
 // (github.com/huggingface/transformers.js-examples), made live: while someone speaks, the piece so
 // far is read again about once a second ('partial', words appear as they are said), and at a pause
 // (or 6 s) it is read a last time ('final').
@@ -26,24 +27,51 @@ const PREV_BUFFERS = Math.ceil(SPEECH_PAD / 512);
 
 const post = (message: unknown) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(message);
 
+type Model = { id: string; label: string; size: string; whisper: boolean; dtype: Record<string, string> };
+const WHISPER: Model = {
+  id: 'onnx-community/whisper-large-v3-turbo',
+  label: 'Whisper turbo',
+  size: 'about 800 MB',
+  whisper: true,
+  dtype: { encoder_model: 'fp16', decoder_model_merged: 'q4' },
+};
+const moonshine = (gpu: boolean): Model => ({
+  id: 'onnx-community/moonshine-base-ONNX',
+  label: 'Moonshine',
+  size: 'about 150 MB',
+  whisper: false,
+  dtype: { encoder_model: 'fp32', decoder_model_merged: gpu ? 'q4' : 'q8' },
+});
+
 async function load() {
   let device: 'webgpu' | 'wasm' = 'wasm';
+  let halfFloats = false; // shader-f16: Whisper turbo's encoder runs in half precision
   try {
-    const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
-    if (gpu && (await gpu.requestAdapter())) device = 'webgpu';
+    const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<{ features: Set<string> } | null> } }).gpu;
+    const adapter = gpu ? await gpu.requestAdapter() : null;
+    if (adapter) {
+      device = 'webgpu';
+      halfFloats = adapter.features.has('shader-f16');
+    }
   } catch {
     /* no WebGPU: the CPU (WebAssembly) */
   }
-  post({ type: 'status', status: 'loading', device });
+  const model = device === 'webgpu' && halfFloats ? WHISPER : moonshine(device === 'webgpu');
+  isWhisper = model.whisper;
+  post({ type: 'status', status: 'loading', device, model: model.label, size: model.size });
   const vad = await AutoModel.from_pretrained('onnx-community/silero-vad', { config: { model_type: 'custom' } as never, dtype: 'fp32' });
-  const transcriber = await pipeline('automatic-speech-recognition', 'onnx-community/moonshine-base-ONNX', {
-    device,
-    dtype: device === 'webgpu' ? { encoder_model: 'fp32', decoder_model_merged: 'q4' } : { encoder_model: 'fp32', decoder_model_merged: 'q8' },
-  });
-  await transcriber(new Float32Array(SAMPLE_RATE)); // compiles the GPU shaders before the first piece
-  post({ type: 'status', status: 'ready', device });
+  const transcriber = await pipeline('automatic-speech-recognition', model.id, { device, dtype: model.dtype as never });
+  await transcriber(new Float32Array(SAMPLE_RATE), whisperOptions()); // compiles the GPU shaders before the first piece
+  post({ type: 'status', status: 'ready', device, model: model.label });
   return { vad, transcriber };
 }
+
+let isWhisper = false;
+// Whisper is told the language (English, as the menu says): left to guess, a few seconds of
+// speech get a wrong one now and then.
+const whisperOptions = () => (isWhisper ? { language: 'english', task: 'transcribe' } : {});
+// What Whisper writes over music or silence (its training subtitles), not speech.
+const INVENTED = /^\s*(?:\[[^\]]*\]|\([^)]*\)|♪+|thank you\.?|thanks for watching!?|you|bye\.?|subtitles by .*|\.+)\s*$/i;
 
 const models = load().catch((e: unknown) => {
   post({ type: 'error', message: e instanceof Error ? e.message : String(e) });
@@ -94,8 +122,9 @@ function audioSoFar(): Float32Array {
 async function read(audio: Float32Array, final: boolean, id: number) {
   const { transcriber } = await models;
   const t0 = performance.now();
-  const out = (await queue(() => transcriber(audio) as Promise<{ text: string } | { text: string }[]>)) as { text: string } | { text: string }[];
-  const text = (Array.isArray(out) ? out[0]?.text : out.text)?.trim() ?? '';
+  const out = (await queue(() => transcriber(audio, whisperOptions() as never) as Promise<{ text: string } | { text: string }[]>)) as { text: string } | { text: string }[];
+  const raw = (Array.isArray(out) ? out[0]?.text : out.text)?.trim() ?? '';
+  const text = INVENTED.test(raw) ? '' : raw;
   post({ type: 'stats', kind: final ? 'final' : 'partial', seconds: +(audio.length / SAMPLE_RATE).toFixed(2), ms: Math.round(performance.now() - t0), text });
   if (!final && id !== pieceId) return; // the piece already ended: its final says it
   // A letter or two on its own is noise read as speech, not a word.

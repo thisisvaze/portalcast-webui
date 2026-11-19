@@ -68,12 +68,12 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
       try {
         const stopNow = await startLiveCaptions(media, {
           onText,
-          onStatus: (status, device) => {
+          onStatus: (status, device, model, size) => {
             if (status === 'loading') {
-              toast.info('Live captions: getting the speech model ready (about 150 MB the first time)…', { toastId: TOAST, autoClose: false });
+              toast.info(`Live captions: getting ${model} ready (${size ?? 'a download'} the first time)…`, { toastId: TOAST, autoClose: false });
             } else {
               toast.dismiss(TOAST);
-              toast.success(`Live captions on (${device === 'webgpu' ? 'GPU' : 'CPU'})`, { autoClose: 2500 });
+              toast.success(`Live captions on: ${model}, ${device === 'webgpu' ? 'GPU' : 'CPU'}`, { autoClose: 2500 });
             }
           },
           onError: () => {
