@@ -1,21 +1,26 @@
 /// <reference lib="webworker" />
-// Live captions, in the browser (index.ts starts it): Silero VAD cuts the audio at pauses and
-// Moonshine (English) writes each piece down. Adapted from Hugging Face's moonshine-web example
-// (github.com/huggingface/transformers.js-examples), with shorter pieces: commentary rarely
-// pauses, and captions should keep coming.
+// Live captions, in the browser (index.ts starts it): Silero VAD finds speech, Moonshine (English)
+// writes it down. Adapted from Hugging Face's moonshine-web example
+// (github.com/huggingface/transformers.js-examples), made live: while someone speaks, the piece so
+// far is read again about once a second ('partial', words appear as they are said), and at a pause
+// (or 6 s) it is read a last time ('final').
 //
-// In:  { buffer: Float32Array } (16 kHz mono, 512 samples or more)
-// Out: { type: 'status', status: 'loading' | 'ready', device } | { type: 'text', text } | { type: 'error', message }
+// In:  { buffer: Float32Array } (16 kHz mono, 512 samples)
+// Out: { type: 'status', status: 'loading' | 'ready', device }
+//      { type: 'text', text, final }   (a partial replaces the line being written; a final settles it)
+//      { type: 'stats', kind, seconds, ms, text }   (for the console)
+//      { type: 'error', message }
 import { AutoModel, Tensor, pipeline } from '@huggingface/transformers';
 
 const SAMPLE_RATE = 16000;
 const PER_MS = SAMPLE_RATE / 1000;
 const SPEECH_THRESHOLD = 0.3; // above: speech
 const EXIT_THRESHOLD = 0.1; // while speaking, below this: not speech any more
-const MIN_SILENCE = 400 * PER_MS; // a pause this long ends a piece
-const SPEECH_PAD = 80 * PER_MS; // kept before and after a piece
+const MIN_SILENCE = 300 * PER_MS; // a pause this long ends a piece
+const SPEECH_PAD = 80 * PER_MS; // kept before a piece
 const MIN_SPEECH = 250 * PER_MS; // shorter pieces are dropped
-const MAX_PIECE = 8 * SAMPLE_RATE; // cut here even without a pause
+const MAX_PIECE = 6 * SAMPLE_RATE; // cut here even without a pause (commentary rarely pauses)
+const PARTIAL_EVERY = 0.8 * SAMPLE_RATE; // read the piece so far again after this much more audio
 const PREV_BUFFERS = Math.ceil(SPEECH_PAD / 512);
 
 const post = (message: unknown) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(message);
@@ -59,6 +64,9 @@ let length = 0;
 let speaking = false;
 let silence = 0;
 let prev: Float32Array[] = [];
+let sinceRead = 0; // samples added since the piece was last read
+let reading = false; // a partial read in flight (never two at once: they would pile up)
+let pieceId = 0; // a partial from an earlier piece is dropped
 
 async function isSpeech(buffer: Float32Array): Promise<boolean> {
   const { vad } = await models;
@@ -69,7 +77,8 @@ async function isSpeech(buffer: Float32Array): Promise<boolean> {
   return p > SPEECH_THRESHOLD || (speaking && p >= EXIT_THRESHOLD);
 }
 
-function send() {
+/** The piece so far, with a little audio from just before it (so the first word is whole). */
+function audioSoFar(): Float32Array {
   const before = prev.reduce((n, b) => n + b.length, 0);
   const audio = new Float32Array(before + length);
   let at = 0;
@@ -78,15 +87,28 @@ function send() {
     at += b.length;
   }
   audio.set(piece.subarray(0, length), at);
-  void models.then(({ transcriber }) =>
-    queue(() => transcriber(audio) as Promise<{ text: string } | { text: string }[]>).then((out) => {
-      const text = (Array.isArray(out) ? out[0]?.text : out.text)?.trim();
-      if (text) post({ type: 'text', text });
-    }),
-  );
+  return audio;
+}
+
+async function read(audio: Float32Array, final: boolean, id: number) {
+  const { transcriber } = await models;
+  const t0 = performance.now();
+  const out = (await queue(() => transcriber(audio) as Promise<{ text: string } | { text: string }[]>)) as { text: string } | { text: string }[];
+  const text = (Array.isArray(out) ? out[0]?.text : out.text)?.trim() ?? '';
+  post({ type: 'stats', kind: final ? 'final' : 'partial', seconds: +(audio.length / SAMPLE_RATE).toFixed(2), ms: Math.round(performance.now() - t0), text });
+  if (!final && id !== pieceId) return; // the piece already ended: its final says it
+  if (text) post({ type: 'text', text, final });
+}
+
+function finish() {
+  const audio = audioSoFar();
+  const id = pieceId;
+  pieceId++;
+  void read(audio, true, id);
   length = 0;
   speaking = false;
   silence = 0;
+  sinceRead = 0;
   prev = [];
 }
 
@@ -96,7 +118,6 @@ self.onmessage = async (event: MessageEvent<{ buffer: Float32Array }>) => {
   const speech = await isSpeech(buffer);
 
   if (!wasSpeaking && !speech) {
-    // Not in a piece: keep a little audio from just before, so the first word is not clipped.
     if (prev.length >= PREV_BUFFERS) prev.shift();
     prev.push(buffer);
     return;
@@ -106,7 +127,7 @@ self.onmessage = async (event: MessageEvent<{ buffer: Float32Array }>) => {
   if (buffer.length >= room) {
     piece.set(buffer.subarray(0, room), length);
     length += room;
-    send();
+    finish();
     const rest = buffer.subarray(room);
     piece.set(rest, 0);
     length = rest.length;
@@ -115,10 +136,19 @@ self.onmessage = async (event: MessageEvent<{ buffer: Float32Array }>) => {
   }
   piece.set(buffer, length);
   length += buffer.length;
+  sinceRead += buffer.length;
 
   if (speech) {
     speaking = true;
     silence = 0;
+    // Words as they are said: read the piece so far again, one read at a time.
+    if (sinceRead >= PARTIAL_EVERY && !reading && length >= MIN_SPEECH) {
+      sinceRead = 0;
+      reading = true;
+      void read(audioSoFar(), false, pieceId).finally(() => {
+        reading = false;
+      });
+    }
     return;
   }
   silence += buffer.length;
@@ -127,7 +157,8 @@ self.onmessage = async (event: MessageEvent<{ buffer: Float32Array }>) => {
     length = 0;
     speaking = false;
     silence = 0;
+    sinceRead = 0;
     return;
   }
-  send();
+  finish();
 };

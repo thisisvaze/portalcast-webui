@@ -24,21 +24,38 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
     let stop: (() => void) | null = null;
     let starting = false;
     let disposed = false;
-    const shown: VTTCue[] = [];
+    // On screen: the last settled line, then the line being said. A line stays until newer speech
+    // replaces it, and all go after a quiet spell.
+    const settled: VTTCue[] = [];
+    let saying: VTTCue | null = null;
+    let quiet: ReturnType<typeof setTimeout> | undefined;
+    const LONG = 3600; // a cue's end: it is removed, never timed out
 
-    const onText = (text: string) => {
+    const onText = (text: string, final: boolean) => {
       const at = player.currentTime;
-      const words = text.split(/\s+/).length;
-      const cue = new VTTCue(at, at + Math.min(8, Math.max(3, words * 0.45)), text);
-      track.addCue(cue as never);
-      shown.push(cue);
-      while (shown.length > 2) track.removeCue(shown.shift() as never);
+      if (saying) track.removeCue(saying as never);
+      saying = new VTTCue(at, at + LONG, text);
+      track.addCue(saying as never);
+      if (final) {
+        settled.push(saying);
+        saying = null;
+      }
+      while (settled.length + (saying ? 1 : 0) > 2) track.removeCue(settled.shift() as never);
+      clearTimeout(quiet);
+      quiet = setTimeout(clear, 7000);
+    };
+
+    const clear = () => {
+      clearTimeout(quiet);
+      for (const cue of settled.splice(0)) track.removeCue(cue as never);
+      if (saying) track.removeCue(saying as never);
+      saying = null;
     };
 
     const halt = () => {
       stop?.();
       stop = null;
-      for (const cue of shown.splice(0)) track.removeCue(cue as never);
+      clear();
     };
 
     const start = async () => {
