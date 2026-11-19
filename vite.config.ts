@@ -178,6 +178,9 @@ export default defineConfig({
     cssTarget: ESBUILD_TARGETS,
     cssMinify: 'lightningcss',
   },
+  // Live captions' worker (src/utils/liveCaptions) loads Transformers.js in pieces: a module
+  // worker can, a classic one cannot. Only browsers that run module workers start it.
+  worker: { format: 'es' },
   base: './',
   server: {
     host: '0.0.0.0',

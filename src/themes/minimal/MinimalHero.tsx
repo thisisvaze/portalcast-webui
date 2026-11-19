@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion, useMotionValue, useReducedMotion } from 'motion/react';
 import { Info, Play } from 'lucide-react';
 import ActivityIndicator from '@/components/ui/ActivityIndicator';
 import type { ContinueHeroProps } from '@/components/organisms/browse/ContinueHero';
@@ -10,19 +10,34 @@ import { easeOut, smooth, snappy } from './motion';
 /**
  * Minimal theme's Home hero, Apple TV style: the backdrop large, fading into black at the
  * bottom, title (or logo art) bottom left, a white Resume button and a glass Details one (the
- * title's page). The art fades in once it has loaded; nothing moves after that.
+ * title's page). The art fades in once it has loaded, then drifts a little slower than the page
+ * as Home scrolls (parallax; still with Reduce Motion).
  */
 const heroButton =
   'inline-flex w-fit items-center gap-2 rounded-xl px-7 py-3 text-base font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white [&.focused]:outline-2 [&.focused]:outline-offset-4 [&.focused]:outline-white';
 const MinimalHero: React.FC<ContinueHeroProps> = ({ progressRecords, onResume }) => {
   const hero = useContinueHero(progressRecords);
   const [loadedArt, setLoadedArt] = useState<string | null>(null);
+  // Parallax: the art moves at 30 % of the scroll, so the page slides over it. A motion value
+  // (a transform on the compositor), set from Home's own scroller, so no re-render per frame.
+  const sectionRef = useRef<HTMLElement>(null);
+  const artY = useMotionValue(0);
+  const still = useReducedMotion();
+  const shown = !!hero;
+  useEffect(() => {
+    const scroller = sectionRef.current?.closest('#app-content-scroll');
+    if (!scroller || still) return;
+    const onScroll = () => artY.set(scroller.scrollTop * 0.3);
+    onScroll();
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, [artY, still, shown]);
   if (!hero) return null;
   const { item, details, title, art, onArtError, detail, pct, openDetails, detailsLoading } = hero;
   const src = art ? downsize(art, 'w1280') : null;
 
   return (
-    <section className="relative mb-10 overflow-hidden rounded-2xl bg-gray-900">
+    <section ref={sectionRef} className="relative mb-10 overflow-hidden rounded-2xl bg-gray-900">
       <div className="relative min-h-80 w-full sm:aspect-21/9 sm:min-h-0">
         {src && (
           <motion.img
@@ -34,6 +49,7 @@ const MinimalHero: React.FC<ContinueHeroProps> = ({ progressRecords, onResume })
             initial={{ opacity: 0, scale: 1.04 }}
             animate={loadedArt === src ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.04 }}
             transition={{ duration: 0.9, ease: easeOut }}
+            style={{ y: artY }}
             className="absolute inset-0 h-full w-full object-cover"
           />
         )}

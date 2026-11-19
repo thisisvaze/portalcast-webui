@@ -29,6 +29,7 @@ import { bindSubtitleDelay, applySubtitleDelay, getSubtitleDelay } from '@/utils
 import { createKeptTracker, onlineSubtitleKey } from '@/utils/subtitleKept';
 import { useTVRemoteNavigation } from '@/components/organisms/video/hooks/useTVRemoteNavigation';
 import { useTouchGestures } from '@/components/organisms/video/hooks/useTouchGestures';
+import { useLiveCaptions } from '@/context/video/useLiveCaptions';
 
 const VideoPlayerContent: React.FC = () => {
   const {
@@ -85,6 +86,8 @@ const VideoPlayerContent: React.FC = () => {
   } = useVideoContext();
 
   const remote = useMediaRemote(playerRef);
+  // Captions → "Live (automatic, English)": speech to text in the browser (utils/liveCaptions).
+  useLiveCaptions(playerRef, streamUrl);
 
   // Identity of the playing title, as the server keys catalog items (movie stream id /
   // episode id); live is shown but never reported.
