@@ -38,7 +38,7 @@ export function useDownloadActions({
     }
   }, [rawStreamUrl]);
 
-  const handleDownload = useCallback(async () => {
+  const handleDownload = useCallback(async (via?: string) => {
     if (!item && !itemId) return;
     try {
       const isSeries = contentType === 'series' || item?.is_episode ? '1' : '0';
@@ -83,7 +83,7 @@ export function useDownloadActions({
       });
       const baseUrl = URL_PATHS.HOST === '/' ? '' : URL_PATHS.HOST;
       window.open(`${baseUrl}${url}`, '_blank');
-      toast.success('Download started!');
+      toast.success(via ? `Download started! (from ${via})` : 'Download started!'); // TEMP: `via` diagnostic
     } catch (err) {
       console.error(err);
       toast.error('Failed to start download');

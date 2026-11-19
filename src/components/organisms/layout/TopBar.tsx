@@ -46,7 +46,8 @@ export const TopBar = React.memo<TopBarProps>(({ onBack, stats }) => {
             {contentType !== 'tv' && (
               <button
                 data-focusable="true"
-                onClick={handleDownload}
+                // TEMP diagnostic (unwanted "Download started"): detail 0 = Enter/remote or a script, else a real click.
+                onClick={(e) => handleDownload(e.detail === 0 ? 'Enter key' : 'a click')}
                 title="Download"
                 aria-label="Download"
                 className="ui-player-button flex items-center rounded-lg px-3 py-1.5 text-sm text-white shadow-xs transition-all duration-300 hover:shadow-md active:scale-95 md:px-4 md:py-2 md:text-base"
