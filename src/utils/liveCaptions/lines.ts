@@ -1,23 +1,16 @@
 /**
- * The newest words of live captions as at most `maxLines` lines of at most `maxChars` (broadcast
- * captions: 2 lines of 32 to 42), broken between words. Older words fall off the top as new
- * ones come, as YouTube's live captions roll. A word longer than a line gets a line of its own.
+ * Live captions as at most `maxLines` lines of at most `maxChars` (broadcast captions: 2 lines of
+ * 32 to 42), roll-up style: words fill a line left to right and stay where they are; a full line
+ * moves up whole and the top one goes. (Wrapping from the newest word instead moved every word
+ * along each time one came, which could not be read.) A word longer than a line has a line of its own.
  * Check: node --experimental-strip-types scripts/caption-lines-check.ts
  */
 export function captionLines(text: string, maxChars = 42, maxLines = 2): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
-  let line = '';
-  for (let i = words.length - 1; i >= 0; i--) {
-    const word = words[i];
-    if (line && line.length + 1 + word.length > maxChars) {
-      lines.unshift(line);
-      if (lines.length === maxLines) return lines;
-      line = word;
-    } else {
-      line = line ? `${word} ${line}` : word;
-    }
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const last = lines.length - 1;
+    if (last >= 0 && lines[last].length + 1 + word.length <= maxChars) lines[last] += ` ${word}`;
+    else lines.push(word);
   }
-  if (line) lines.unshift(line);
   return lines.slice(-maxLines);
 }

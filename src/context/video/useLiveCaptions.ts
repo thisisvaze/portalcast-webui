@@ -9,7 +9,7 @@ const TOAST = 'live-captions';
 /**
  * "Live (automatic, English)" in the player's Captions menu: picked, it writes down what is said
  * (utils/liveCaptions). Returns the lines to show (null: none), drawn by the player itself: two
- * lines of at most 42 characters, words added as they are said, older ones rolling off the top.
+ * lines of at most 42 characters, words added as they are said, a full line moving up whole.
  * The track only stands for the menu entry: cues through it were not removed reliably (the
  * player mirrors tracks into the browser's, which threw on removal, so old lines piled up).
  * Nothing loads until it is picked. Follows the player to the next channel or title (`sourceKey`).
@@ -29,7 +29,7 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
     let stop: (() => void) | null = null;
     let starting = false;
     let disposed = false;
-    // What has been said (settled, the last few hundred characters) and the line being said.
+    // What has been said (settled, its last two lines) and the piece being said.
     let said = '';
     let saying = '';
     let quiet: ReturnType<typeof setTimeout> | undefined;
@@ -37,7 +37,7 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
 
     const onText = (text: string, final: boolean) => {
       if (final) {
-        said = `${said} ${text}`.trim().slice(-300);
+        said = captionLines(`${said} ${text}`.trim()).join(' '); // its last two lines: those stay as they are
         saying = '';
       } else {
         saying = text;
