@@ -1,5 +1,7 @@
 import React from 'react';
 import { useVideoContext } from '@/context/video';
+import { liveCaptionsSupported } from '@/utils/liveCaptions';
+import type { CaptionEngine } from '@/utils/liveCaptions/preference';
 import { formatDelay, getSubtitleDelay, setSubtitleDelay, subscribeSubtitleDelay } from '@/utils/subtitleDelay';
 import {
   useVideoQualityOptions,
@@ -43,6 +45,8 @@ export const SettingsMenu = React.memo(() => {
     addLocalSubtitleFile,
     clearSubtitleSearch,
     chooseCaption,
+    captionEngine,
+    setCaptionEngine,
     streamUrl,
     item,
     seriesItem,
@@ -473,6 +477,22 @@ export const SettingsMenu = React.memo(() => {
               )}
             </button>
           ))}
+
+          {liveCaptionsSupported() && (
+            <label className="flex flex-col gap-1 border-t border-line-strong px-3 py-2 text-sm">
+              Auto-caption model
+              <select
+                data-focusable="true"
+                data-control="settings-item"
+                className={subField}
+                value={captionEngine}
+                onChange={e => setCaptionEngine(e.target.value as CaptionEngine)}
+              >
+                <option value="nemotron">Nemotron (default)</option>
+                <option value="moonshine">Moonshine v2</option>
+              </select>
+            </label>
+          )}
 
           {/* Per-title subtitle timing (utils/subtitleDelay.ts), saved on this device */}
           <div className="mt-1 border-t border-line-strong px-3 pt-2 text-xs text-fg-soft">

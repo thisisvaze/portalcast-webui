@@ -11,6 +11,7 @@
 //      { type: 'error', message }
 import * as ort from 'onnxruntime-web/wasm';
 import wasm from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url';
+import { bytes, download } from './modelFiles';
 import { MOONSHINE_FILES, loadMoonshine } from './moonshine';
 
 // Named for the runtime: in development Vite serves it from a folder that does not have the file.
@@ -40,18 +41,6 @@ const MOONSHINE = 'https://huggingface.co/moonshine-ai/moonshine-streaming/resol
 const SILERO = 'https://huggingface.co/onnx-community/silero-vad/resolve/main/onnx/model.onnx';
 
 const post = (message: unknown) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(message);
-
-/** A model file, from the browser's cache after the first time. */
-async function download(url: string): Promise<Response> {
-  const cache = await caches.open('live-captions').catch(() => null);
-  const cached = await cache?.match(url);
-  if (cached) return cached;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${url}: ${response.status}`);
-  await cache?.put(url, response.clone()).catch(() => undefined);
-  return response;
-}
-const bytes = async (url: string) => new Uint8Array(await (await download(url)).arrayBuffer());
 
 async function load() {
   post({ type: 'status', status: 'loading', device: 'wasm', model: 'Moonshine v2', size: 'about 300 MB' });

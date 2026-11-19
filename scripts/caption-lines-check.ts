@@ -1,7 +1,8 @@
 // Self-check for src/utils/liveCaptions/lines.ts: node --experimental-strip-types scripts/caption-lines-check.ts
 import assert from 'node:assert/strict';
-import { captionLines } from '../src/utils/liveCaptions/lines.ts';
+import { captionLines as rows } from '../src/utils/liveCaptions/lines.ts';
 
+const captionLines = (text: string, width = 42, count = 2) => rows(text, width, count).map(row => row.text);
 assert.deepEqual(captionLines(''), []);
 assert.deepEqual(captionLines('A trip to break the walls of Troy.'), ['A trip to break the walls of Troy.']);
 // Two lines at most, the newest words kept, broken between words.
@@ -24,4 +25,9 @@ const kept = captionLines(long).join(' ');
 assert.deepEqual(captionLines(`${kept} and more words here`, 42, 10).slice(0, 2), captionLines(long));
 // A word longer than a line is a line of its own.
 assert.deepEqual(captionLines('short supercalifragilisticexpialidocious', 10, 2), ['short', 'supercalifragilisticexpialidocious']);
+// A surviving line keeps its word identities when it rolls up or the recognizer revises its tail.
+const before = rows('one two one two', 7, 2);
+const after = rows('one two one two three', 7, 2);
+assert.deepEqual(after[0], before[1]);
+assert.deepEqual(rows('one two three!', 7, 2, after[0].start), [after[0], { start: 4, text: 'three!' }]);
 console.log('captionLines: all checks passed');

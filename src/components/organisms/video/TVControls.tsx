@@ -52,6 +52,7 @@ export const TVControls = React.memo(() => {
     activeSettingsMenu,
     isReceiver,
     toggleChannelList: onToggleChannelList,
+    goLive,
     cycleFitMode: onCycleFitMode,
     toggleFavorite: onToggleFavorite,
     setActiveSettingsMenu: onActiveSettingsMenuChange,
@@ -167,6 +168,14 @@ export const TVControls = React.memo(() => {
               ) : (
                 <PlayIcon className="h-4 w-4 md:h-6 md:w-6" />
               )}
+            </button>
+            <button
+              type="button"
+              data-focusable="true"
+              onClick={goLive}
+              className="whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold text-fg hover:text-accent md:text-sm"
+            >
+              Go Live
             </button>
             <button
               data-focusable="true"

@@ -37,7 +37,7 @@ export function useCasting(
           },
           {
             currentTime: playerRef.current?.currentTime || 0,
-            volume: playerRef.current?.volume || 1,
+            volume: playerRef.current?.volume ?? 1,
             muted: playerRef.current?.muted || false,
           }
         );

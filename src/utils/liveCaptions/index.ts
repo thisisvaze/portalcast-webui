@@ -1,25 +1,16 @@
-// Live captions: speech to text for whatever is playing, written down as it is said.
-// On a Mac running the captions helper (mlx-audio's server with NVIDIA's Nemotron streaming
-// model, on the Mac's GPU: ws://127.0.0.1:8881) the words come from there, a fraction of a second
-// after they are said; anywhere else the engine runs in the browser (worker.ts: Moonshine v2
-// streaming, English, on the CPU, 1.5 to 2 s behind). The audio is the player's own
-// (captureStream), so the page can read it only when the stream comes through PortalCast (the
-// proxy): a stream played straight from the provider is silent to it.
+// Live captions use the browser's copy of the player audio. Cross-origin provider streams need the proxy.
 import { isTvApp } from '@/utils/helpers';
 import { readTrackPcm } from './trackPcm';
+import type { CaptionEngine } from './preference';
 
 export interface LiveCaptionHandlers {
   /** final false: the line being said, so far (it is replaced); true: that line, settled. */
   onText: (text: string, final: boolean) => void;
   onError: (message: string) => void;
+  onLoading?: (message: string) => void;
 }
 
-export type Device = 'mac' | 'webgpu' | 'wasm';
-
 const SAMPLE_RATE = 16000;
-// The captions helper (scripts/mac-captions-helper.sh): mlx-audio's OpenAI Realtime-style socket.
-const HELPER = 'ws://127.0.0.1:8881/v1/realtime';
-
 // Mono at 16 kHz, posted 512 samples at a time (the VAD's frame). The context runs at 16 kHz where
 // the browser can (Chromium: it resamples with a proper filter); elsewhere each output sample is the
 // mean of the input samples it covers (a simple low-pass, so speech is not aliased).
@@ -65,42 +56,6 @@ export function liveCaptionsSupported(): boolean {
     'captureStream' in HTMLMediaElement.prototype &&
     canRunModuleWorkers()
   );
-}
-
-/** The captions helper's socket, ready for audio; null when it does not answer within a second. */
-function connectHelper(): Promise<WebSocket | null> {
-  return new Promise((resolve) => {
-    let socket: WebSocket;
-    try {
-      socket = new WebSocket(HELPER);
-    } catch {
-      return resolve(null);
-    }
-    const give = (ok: boolean) => {
-      clearTimeout(timer);
-      socket.onmessage = socket.onerror = socket.onclose = null;
-      if (!ok) socket.close();
-      resolve(ok ? socket : null);
-    };
-    const timer = setTimeout(() => give(false), 1000);
-    socket.onerror = socket.onclose = () => give(false);
-    socket.onmessage = (e) => {
-      const m = JSON.parse(e.data);
-      if (m.type === 'session.created') {
-        // 16 kHz PCM in; the helper's own voice detector ends each piece at a pause.
-        socket.send(JSON.stringify({ type: 'session.update', session: { audio: { input: { format: { type: 'audio/pcm', rate: SAMPLE_RATE }, turn_detection: { type: 'server_vad' } } } } }));
-      } else if (m.type === 'session.updated') give(true);
-      else if (m.type === 'error') give(false);
-    };
-  });
-}
-
-/** 16-bit PCM, base64: what the helper takes. */
-function pcm16(samples: Float32Array): string {
-  const bytes = new Uint8Array(samples.length * 2);
-  const view = new DataView(bytes.buffer);
-  samples.forEach((s, i) => view.setInt16(i * 2, Math.max(-1, Math.min(1, s)) * 0x7fff, true));
-  return btoa(String.fromCharCode(...bytes));
 }
 
 /** Chromium can expose the video before it adds the audio to the same capture stream. */
@@ -172,8 +127,8 @@ async function capturePcm(stream: MediaStream, emit: (pcm: Float32Array) => void
   };
 }
 
-/** Starts capture and recognition together; a stale start releases both, even mid-handshake. */
-export async function startLiveCaptions(media: HTMLMediaElement, handlers: LiveCaptionHandlers, signal?: AbortSignal): Promise<() => void> {
+/** Stop both audio capture and recognition when the track or channel changes. */
+export async function startLiveCaptions(media: HTMLMediaElement, handlers: LiveCaptionHandlers, signal?: AbortSignal, engine: CaptionEngine = 'nemotron'): Promise<() => void> {
   if (signal?.aborted) throw new DOMException('Capture stopped', 'AbortError');
   const stream = (media as HTMLMediaElement & { captureStream(): MediaStream }).captureStream();
   let send: ((pcm: Float32Array) => void) | undefined;
@@ -188,6 +143,26 @@ export async function startLiveCaptions(media: HTMLMediaElement, handlers: LiveC
     stopPcm?.();
     stream.getTracks().forEach(t => t.stop());
   };
+  const startBrowser = (choice: CaptionEngine) => {
+    if (closed) return;
+    send = undefined;
+    stopEngine?.();
+    stopEngine = undefined;
+    const failed = (message: string) => {
+      console.warn(`[live-captions] ${choice}: ${message}`);
+      if (choice === 'nemotron') startBrowser('moonshine');
+      else handlers.onError('worker-error');
+    };
+    try {
+      const worker = choice === 'nemotron'
+        ? new Worker(new URL('./nemotron.worker.ts', import.meta.url), { type: 'module' })
+        : new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+      stopEngine = () => { worker.onerror = worker.onmessage = null; worker.terminate(); };
+      attachWorker(worker, { ...handlers, onError: failed }, () => {
+        send = pcm => worker.postMessage({ buffer: pcm }, [pcm.buffer]);
+      });
+    } catch (error) { failed(String(error)); }
+  };
   signal?.addEventListener('abort', close, { once: true });
   try {
     await waitForAudio(stream, signal);
@@ -195,51 +170,20 @@ export async function startLiveCaptions(media: HTMLMediaElement, handlers: LiveC
     const stop = await capturePcm(stream, pcm => send?.(pcm), () => handlers.onError('capture-ended'));
     if (closed) { stop(); throw new DOMException('Capture stopped', 'AbortError'); }
     stopPcm = stop;
-    const helper = await connectHelper();
-    if (closed) { helper?.close(); throw new DOMException('Capture stopped', 'AbortError'); }
-    if (helper) {
-      stopEngine = attachHelper(helper, handlers);
-      send = pcm => {
-        if (helper.readyState === WebSocket.OPEN) helper.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: pcm16(pcm) }));
-      };
-    } else {
-      const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-      stopEngine = () => worker.terminate();
-      attachWorker(worker, handlers);
-      send = pcm => worker.postMessage({ buffer: pcm }, [pcm.buffer]);
-    }
+    startBrowser('gpu' in navigator ? engine : 'moonshine');
     return close;
   } catch (error) { close(); throw error; }
 }
 
-function attachHelper(helper: WebSocket, handlers: LiveCaptionHandlers): () => void {
-  let piece = '';
-  helper.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.type === 'conversation.item.input_audio_transcription.delta') {
-      piece += m.delta;
-      handlers.onText(piece.trim(), false);
-    } else if (m.type === 'conversation.item.input_audio_transcription.completed') {
-      piece = '';
-      if (m.transcript?.trim()) handlers.onText(m.transcript.trim(), true);
-    } else if (m.type === 'error') handlers.onError(m.error?.message ?? 'helper-error');
-  };
-  helper.onclose = () => handlers.onError('helper-closed');
-  console.info('[live-captions] ready: Nemotron on this Mac (captions helper)');
-  return () => {
-    helper.onclose = helper.onmessage = null;
-    helper.close();
-  };
-}
-
-function attachWorker(worker: Worker, handlers: LiveCaptionHandlers) {
-  worker.onerror = () => handlers.onError('worker-error');
-  let device: Device = 'wasm';
+function attachWorker(worker: Worker, handlers: LiveCaptionHandlers, ready: () => void) {
+  worker.onerror = e => handlers.onError(e.message || 'worker-error');
+  let device: 'webgpu' | 'wasm' = 'wasm';
   worker.onmessage = (e: MessageEvent) => {
     const m = e.data;
     if (m.type === 'text') handlers.onText(m.text, m.final);
     else if (m.type === 'status') {
-      if (m.status === 'ready') device = m.device;
+      if (m.status === 'ready') { device = m.device; handlers.onLoading?.(''); ready(); }
+      else if (m.status === 'loading') handlers.onLoading?.(`Loading ${m.model} captions (${m.size} on first use)…`);
       console.info(`[live-captions] ${m.status}: ${m.model} on the ${m.device === 'webgpu' ? 'GPU' : 'CPU'}`);
     } else if (m.type === 'stats') {
       // The console's record of each read: how much audio, how long it took, on what.

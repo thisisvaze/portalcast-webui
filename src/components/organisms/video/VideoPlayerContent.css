@@ -26,6 +26,34 @@ media-provider {
   padding: 0 5%;
 }
 
+.live-captions {
+  width: calc(100% - 2rem);
+  max-width: 42ch;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  max-height: 2.8em;
+  padding: 0 .4em;
+  color: #fff;
+  font: 600 1.125rem/1.4 system-ui, sans-serif;
+  font-size: clamp(1.125rem, 2.2vw, 1.75rem);
+  text-align: left;
+}
+.player-chrome:has(.more-options-menu, .pc-panel) { z-index: 40; }
+.live-caption-lines { flex: none; overflow-wrap: anywhere; }
+.live-caption-background {
+  background: rgba(12, 12, 12, .9);
+  box-shadow: .3em 0 rgba(12, 12, 12, .9), -.3em 0 rgba(12, 12, 12, .9);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .live-captions { transition: bottom 180ms ease-out; }
+  .live-caption-word { animation: caption-word-in 100ms ease-out; }
+  @keyframes caption-word-in { from { opacity: .76; } to { opacity: 1; } }
+}
+
 /* Labels, gradients and blank space let taps reach the picture. */
 .player-chrome[data-visible='true'] :is(button, [role='button'], [data-control='seekbar'], .pc-shade, .pc-panel, .more-options-menu) {
   pointer-events: auto;

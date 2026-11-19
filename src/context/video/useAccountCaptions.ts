@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { LIVE_CAPTIONS_ID } from '@/utils/liveCaptions/preference';
+import { LIVE_CAPTIONS_ID, captionEngineKey, savedCaptionEngine, type CaptionEngine } from '@/utils/liveCaptions/preference';
 
 const legacy = 'portalcast:autoCaptions:en';
 const key = (id: number | undefined) => `${legacy}:${id ?? 'guest'}`;
@@ -16,6 +16,11 @@ export function useAccountCaptions() {
   const { user, updatePreferences, loading } = useAuth();
   const id = user?.id;
   const saved = user?.preferences?.autoEnglishCaptions;
+  const [captionEngine, setEngine] = useState(savedCaptionEngine);
+  const setCaptionEngine = useCallback((engine: CaptionEngine) => {
+    setEngine(engine);
+    try { localStorage.setItem(captionEngineKey, engine); } catch { /* storage unavailable */ }
+  }, []);
   const [local, setLocal] = useState<{ id?: number; enabled: boolean } | null>(null);
   const queue = useRef(Promise.resolve());
   const write = useCallback((enabled: boolean) => {
@@ -53,5 +58,5 @@ export function useAccountCaptions() {
     write(trackId === LIVE_CAPTIONS_ID);
   }, [id, write]);
   const autoCaptions = local && local.id === id ? local.enabled : saved ?? (cached(id) === '1');
-  return { autoCaptions, chooseCaption };
+  return { autoCaptions, chooseCaption, captionEngine, setCaptionEngine };
 }

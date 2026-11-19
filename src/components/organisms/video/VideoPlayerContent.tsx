@@ -30,6 +30,7 @@ import { bindSubtitleDelay, applySubtitleDelay, getSubtitleDelay } from '@/utils
 import { createKeptTracker, onlineSubtitleKey } from '@/utils/subtitleKept';
 import { useTVRemoteNavigation } from '@/components/organisms/video/hooks/useTVRemoteNavigation';
 import { useTouchGestures } from '@/components/organisms/video/hooks/useTouchGestures';
+import { usePlayerVolume } from '@/context/video/usePlayerVolume';
 import { useLiveCaptions } from '@/context/video/useLiveCaptions';
 import { catalogueEnglish } from '@/utils/liveCaptions/preference';
 
@@ -40,6 +41,7 @@ const VideoPlayerContent: React.FC = () => {
 
     controlsVisible,
     autoCaptions,
+    captionEngine,
     cursorVisible,
     useProxy,
     showChannelList,
@@ -68,7 +70,7 @@ const VideoPlayerContent: React.FC = () => {
 
     onProviderChange,
     handleCanPlay,
-    handleVolumeChange,
+    initialPlaybackState,
     handleTimeUpdate,
     handleError,
     handleEnded,
@@ -88,6 +90,7 @@ const VideoPlayerContent: React.FC = () => {
     epgData,
   } = useVideoContext();
 
+  const audio = usePlayerVolume(initialPlaybackState);
   const remote = useMediaRemote(playerRef);
   const source = useProxy ? streamUrl || rawStreamUrl : rawStreamUrl || streamUrl;
   const liveGroup = contentType === 'tv'
@@ -95,7 +98,7 @@ const VideoPlayerContent: React.FC = () => {
     : undefined;
   const audioInfo = contentType === 'tv' ? channelInfo ?? item : item;
   const englishAudio = catalogueEnglish(audioInfo, liveGroup, contentType === 'tv' ? audioInfo?.name : undefined);
-  const liveLines = useLiveCaptions(playerRef, source && `${reloadTrigger}:${useProxy}:${source}`, englishAudio, autoCaptions);
+  const { lines: liveLines, announcement, loading: captionLoading } = useLiveCaptions(playerRef, source && `${reloadTrigger}:${useProxy}:${source}`, englishAudio, autoCaptions, captionEngine);
 
   // Identity of the playing title, as the server keys catalog items (movie stream id /
   // episode id); live is shown but never reported.
@@ -254,7 +257,9 @@ const VideoPlayerContent: React.FC = () => {
           ref={playerRef}
           onProviderChange={onProviderChange}
           onCanPlay={handleCanPlay}
-          onVolumeChange={handleVolumeChange}
+          volume={audio.volume}
+          muted={audio.muted}
+          onVolumeChange={audio.onVolumeChange}
           onTimeUpdate={handleTimeUpdate}
           onError={handleError}
           onEnded={handleEnded}
@@ -304,19 +309,26 @@ const VideoPlayerContent: React.FC = () => {
             }`}
           />
 
-          {/* Live captions (useLiveCaptions): two lines at most, the newest words. */}
-          {liveLines && liveLines.length > 0 && (
+          <div className="sr-only" aria-live="polite" aria-atomic="true">{captionLoading || announcement}</div>
+          {(captionLoading || liveLines.length > 0) && (
             <div
-              aria-live="polite"
-              className={`pointer-events-none absolute inset-x-0 z-10 flex flex-col items-center gap-1 px-4 text-center transition-[bottom] duration-300 ease-in-out ${
-                controlsVisible ? 'bottom-32 md:bottom-40' : 'bottom-10 md:bottom-12'
-              }`}
+              aria-hidden="true"
+              className={`live-captions pointer-events-none absolute inset-x-0 z-30 mx-auto select-none ${controlsVisible ? 'bottom-[min(12rem,45%)] md:bottom-[min(16rem,45%)]' : 'bottom-10 md:bottom-12'}`}
             >
-              {liveLines.map((line, i) => (
-                <span key={i} className="rounded-md bg-black/75 px-2.5 py-0.5 text-lg font-medium leading-snug text-white md:text-2xl">
-                  {line}
-                </span>
-              ))}
+              <div className="live-caption-lines">
+                {captionLoading && <span className="live-caption-background text-sm">{captionLoading}</span>}
+                {liveLines.map(line => (
+                  <div key={line.start}>
+                    <span className="live-caption-background">
+                      {line.text.split(' ').map((word, index) => (
+                        <React.Fragment key={line.start + index}>
+                          {index > 0 && ' '}<span className="live-caption-word">{word}</span>
+                        </React.Fragment>
+                      ))}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

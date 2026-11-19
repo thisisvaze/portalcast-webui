@@ -1,4 +1,14 @@
 export const LIVE_CAPTIONS_ID = 'live-captions';
+export type CaptionEngine = 'nemotron' | 'moonshine';
+export const captionEngineKey = 'portalcast:captionEngine';
+
+export function savedCaptionEngine(): CaptionEngine {
+  try {
+    const engine = localStorage.getItem(captionEngineKey);
+    if (engine === 'moonshine') return engine;
+  } catch { /* storage unavailable */ }
+  return 'nemotron';
+}
 
 function knownLanguage(value?: string | null): string | undefined {
   const lang = typeof value === 'string' ? value.trim().toLowerCase() : '';

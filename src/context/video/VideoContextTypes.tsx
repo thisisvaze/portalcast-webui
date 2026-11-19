@@ -1,12 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createContext, type RefObject } from 'react';
 import type { VideoFitMode, SeekOverlayData } from '@/types';
+import type { CaptionEngine } from '@/utils/liveCaptions/preference';
 import type { MediaProviderAdapter } from '@vidstack/react';
 
 export interface VideoContextType {
   // --- Refs ---
   playerRef: RefObject<any>;
   autoCaptions: boolean;
+  captionEngine: CaptionEngine;
+  setCaptionEngine: (engine: CaptionEngine) => void;
   chooseCaption: (trackId?: string) => void;
   playerContainerRef: RefObject<HTMLDivElement | null>;
   settingsMenuRef: RefObject<HTMLDivElement | null>;
@@ -79,6 +82,7 @@ export interface VideoContextType {
 
   toggleSettingsMenu: () => void;
   toggleChannelList: () => void;
+  goLive: () => void;
 
   setControlsVisible: (v: boolean) => void;
   setCursorVisible: (v: boolean) => void;
@@ -98,7 +102,6 @@ export interface VideoContextType {
 
   // --- Vidstack Native Event Handlers ---
   handleCanPlay: () => void;
-  handleVolumeChange: (e?: any) => void;
   handleTimeUpdate: (e?: any) => void;
   handleError: (e: any) => void;
   handleEnded: () => void;
@@ -107,7 +110,7 @@ export interface VideoContextType {
   onProviderChange: (provider: MediaProviderAdapter | null) => void;
   handleCast: (deviceId: string) => void;
   handleCopyLink: () => void;
-  handleDownload: () => void;
+  handleDownload: (via?: string) => void;
   searchOnlineSubtitles: (query?: string | import('./useSubtitles').SubtitleQuery) => Promise<any[]>;
   addOnlineSubtitle: (result: { fileId: number; language: string; releaseName: string }) => string;
   addLocalSubtitleFile: (file: File) => Promise<void>;

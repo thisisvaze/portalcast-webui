@@ -7,13 +7,13 @@ import React, {
   useMemo,
   type ReactNode,
 } from 'react';
+import type { MediaPlayerInstance } from '@vidstack/react';
 import { isTizenDevice, isTvApp } from '@/utils/helpers';
 import type { VideoFitMode } from '@/types';
 import {
   VideoContext,
   type VideoContextType,
 } from '@/context/video/VideoContextTypes';
-import { useAuth } from '@/context/AuthContext';
 import { useEpgSync } from '@/context/video/useEpgSync';
 import { useHlsRecovery } from '@/context/video/useHlsRecovery';
 import { useVideoSeek } from '@/context/video/useVideoSeek';
@@ -96,14 +96,13 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
   castTo,
     refreshReceivers,
 }) => {
-  const { user, updatePreferences } = useAuth();
-  const { autoCaptions, chooseCaption } = useAccountCaptions();
+  const { autoCaptions, chooseCaption, captionEngine, setCaptionEngine } = useAccountCaptions();
   const isTizen = isTvApp(); // Samsung or LG
 
   // --- Refs ---
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<any | null>(null);
+  const playerRef = useRef<MediaPlayerInstance>(null);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cursorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -275,47 +274,18 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     if (controlsVisible) setShowChannelList(true);
   }, [controlsVisible, showControlsAndCursor]);
 
-  const handleCanPlay = useCallback(() => {
+  const goLive = useCallback(() => {
     const player = playerRef.current;
-    if (!player) return;
-    resetRecoveryState();
-
-    const savedVolume =
-      initialPlaybackState?.volume ?? user?.preferences?.volume;
-    const savedMuted = initialPlaybackState?.muted ?? user?.preferences?.muted;
-    if (savedVolume !== undefined) player.volume = savedVolume;
-    if (savedMuted !== undefined) player.muted = savedMuted;
-  }, [initialPlaybackState, resetRecoveryState, user]);
-
-  // Persist volume/mute per user. Dragging the volume slider fires this on every step.
-  const volumeSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
-  const handleVolumeChange = useCallback(
-    (e: any) => {
-      const { volume, muted } = e?.detail ?? {};
-      if (volume === undefined) return;
-      if (!user) return;
-      if (
-        user.preferences?.volume === volume &&
-        user.preferences?.muted === muted
-      )
-        return;
-      if (volumeSyncTimeoutRef.current)
-        clearTimeout(volumeSyncTimeoutRef.current);
-      volumeSyncTimeoutRef.current = setTimeout(() => {
-        updatePreferences({ volume, muted });
-      }, 500);
-    },
-    [user, updatePreferences]
-  );
-
-  useEffect(() => {
-    return () => {
-      if (volumeSyncTimeoutRef.current)
-        clearTimeout(volumeSyncTimeoutRef.current);
-    };
-  }, []);
+    const target = player?.state.liveSyncPosition;
+    if (player?.provider && target != null && Number.isFinite(target) && target > 0) {
+      // Vidstack's seekToLiveEdge skips streams marked plain "live", even after a pause.
+      if (player.currentTime < target) player.provider.setCurrentTime(target);
+      player.remoteControl.play();
+    } else {
+      // Native TV players can omit the live position. Retuning opens the current broadcast.
+      setReloadTrigger((previous) => previous + 1);
+    }
+  }, [setReloadTrigger]);
 
   const handleProxyToggle = useCallback(
     (newProxyState: boolean) => {
@@ -355,6 +325,8 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
 
       autoCaptions,
       chooseCaption,
+      captionEngine,
+      setCaptionEngine,
       controlsVisible,
       cursorVisible,
       copied,
@@ -436,18 +408,20 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       setUseProxy: handleProxyToggle,
       handleCast,
       onProviderChange,
-      handleCanPlay,
-      handleVolumeChange,
+      handleCanPlay: resetRecoveryState,
       handleTimeUpdate,
       handleError,
       handleEnded,
       toggleChannelList,
+      goLive,
       handleVideoClick: showControlsAndCursor,
       handleMouseMove: showControlsAndCursor,
     }),
     [
       autoCaptions,
       chooseCaption,
+      captionEngine,
+      setCaptionEngine,
       controlsVisible,
       cursorVisible,
       copied,
@@ -516,12 +490,12 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       handleProxyToggle,
       handleCast,
       onProviderChange,
-      handleCanPlay,
-      handleVolumeChange,
+      resetRecoveryState,
       handleTimeUpdate,
       handleError,
       handleEnded,
       toggleChannelList,
+      goLive,
     ]
   );
 

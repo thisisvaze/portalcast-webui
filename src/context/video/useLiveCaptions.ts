@@ -2,19 +2,21 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { TextTrack, type MediaPlayerInstance } from '@vidstack/react';
 import { toast } from 'react-toastify';
 import { liveCaptionsSupported, startLiveCaptions } from '@/utils/liveCaptions';
-import { captionLines } from '@/utils/liveCaptions/lines';
-import { LIVE_CAPTIONS_ID, playingEnglish } from '@/utils/liveCaptions/preference';
+import { captionLines, type CaptionLine } from '@/utils/liveCaptions/lines';
+import { LIVE_CAPTIONS_ID, playingEnglish, type CaptionEngine } from '@/utils/liveCaptions/preference';
 
 /**
  * "Live (automatic, English)" in the player's Captions menu: picked, it writes down what is said
- * (utils/liveCaptions). Returns the lines to show (null: none), drawn by the player itself: two
+ * (utils/liveCaptions). Returns the visible lines and the settled phrase for screen readers. The player draws two
  * lines of at most 42 characters, words added as they are said, a full line moving up whole.
  * The track only stands for the menu entry: cues through it were not removed reliably (the
  * player mirrors tracks into the browser's, which threw on removal, so old lines piled up).
  * Nothing loads until it is picked. Follows the player to the next channel or title (`sourceKey`).
  */
-export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>, sourceKey: string | null | undefined, englishAudio: boolean | undefined, autoCaptions: boolean): string[] | null {
-  const [lines, setLines] = useState<string[] | null>(null);
+export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>, sourceKey: string | null | undefined, englishAudio: boolean | undefined, autoCaptions: boolean, engine: CaptionEngine) {
+  const [lines, setLines] = useState<CaptionLine[]>([]);
+  const [announcement, setAnnouncement] = useState('');
+  const [loading, setLoading] = useState('');
   const wanted = useRef(autoCaptions);
   const syncChoice = useRef<((enabled: boolean) => void) | null>(null);
   useEffect(() => {
@@ -36,18 +38,17 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
     let failed = false;
     // What has been said (settled, its last two lines) and the piece being said.
     let said = '';
-    let saying = '';
+    let firstWord = 0;
     let quiet: ReturnType<typeof setTimeout> | undefined;
-    const show = () => setLines(captionLines(`${said} ${saying}`.trim()));
 
     const onText = (text: string, final: boolean) => {
+      const rows = captionLines(`${said} ${text}`, 42, 2, firstWord);
       if (final) {
-        said = captionLines(`${said} ${text}`.trim()).join(' '); // its last two lines: those stay as they are
-        saying = '';
-      } else {
-        saying = text;
+        said = rows.map(row => row.text).join(' ');
+        firstWord = rows[0]?.start ?? firstWord;
+        setAnnouncement(text);
       }
-      show();
+      setLines(rows);
       clearTimeout(quiet);
       quiet = setTimeout(clear, 7000);
     };
@@ -55,8 +56,9 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
     const clear = () => {
       clearTimeout(quiet);
       said = '';
-      saying = '';
-      setLines(null);
+      firstWord = 0;
+      setLines([]);
+      setAnnouncement('');
     };
 
     const halt = () => {
@@ -66,6 +68,7 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
       pending = null;
       stop?.();
       stop = null;
+      setLoading('');
       clear();
     };
 
@@ -85,8 +88,9 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
       try {
         const stopNow = await startLiveCaptions(media, {
           onText: (text, final) => { if (id === generation) onText(text, final); },
+          onLoading: message => { if (id === generation) setLoading(message); },
           onError: () => fail("Live captions couldn't start. Try again in a moment."),
-        }, pending.signal);
+        }, pending.signal, engine);
         if (id !== generation) stopNow();
         else stop = stopNow;
       } catch (e) {
@@ -133,7 +137,7 @@ export function useLiveCaptions(playerRef: RefObject<MediaPlayerInstance | null>
       halt();
       player.textTracks.remove(track);
     };
-  }, [playerRef, sourceKey, englishAudio]);
+  }, [playerRef, sourceKey, englishAudio, engine]);
 
-  return lines;
+  return { lines, announcement, loading };
 }
