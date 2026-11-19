@@ -1,5 +1,5 @@
 // Live captions: speech to text for whatever is playing, written down as it is said.
-// The engine runs in the browser (worker.ts: Moonshine, English; WebGPU, else the CPU). The
+// The engine runs in the browser (worker.ts: Moonshine v2 streaming, English, on the CPU). The
 // audio is the player's own (captureStream), so the page can read it only when the stream comes
 // through PortalCast (the proxy): a stream played straight from the provider is silent to it.
 import { isTvApp } from '@/utils/helpers';
