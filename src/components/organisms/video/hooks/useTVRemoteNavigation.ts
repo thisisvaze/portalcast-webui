@@ -5,6 +5,7 @@ import type { TvChannelListRef } from '@/components/organisms/channels/TvChannel
 import type { EpisodeOverlayRef } from '@/components/organisms/video/EpisodeOverlay';
 import { useVideoContext } from '@/context/video';
 import { isTvApp } from '@/utils/helpers';
+import { subtitleSizes } from '@/utils/subtitleSize';
 
 const TV_APP = isTvApp();
 
@@ -25,6 +26,8 @@ export function useTVRemoteNavigation(
   const {
     playerContainerRef,
     settingsMenuRef,
+    subtitleSize,
+    setSubtitleSize,
     controlsVisible,
     isSettingsMenuOpen,
     showEpisodeList,
@@ -156,6 +159,15 @@ export function useTVRemoteNavigation(
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
         && e.keyCode !== 38 && e.keyCode !== 40) return;
+      if (e.key === '+' || e.key === '=' || e.key === '-') {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || e.defaultPrevented || showChannelList || showEpisodeList) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const step = e.key === '-' ? -1 : 1;
+        const next = subtitleSizes[subtitleSizes.indexOf(subtitleSize) + step];
+        if (next) setSubtitleSize(next);
+        return;
+      }
       const wereControlsHidden = !navRef.current.isControlsVisible;
 
       e.stopPropagation();
@@ -481,6 +493,8 @@ export function useTVRemoteNavigation(
     playNextEpisode,
     playPrevEpisode,
     settingsMenuRef,
+    subtitleSize,
+    setSubtitleSize,
     setControlsVisible,
     showNextEpisodeButton,
     setShowNextEpisodeButton,

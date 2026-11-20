@@ -22,6 +22,7 @@ import { useCasting } from '@/context/video/useCasting';
 import { useProgressTracking } from '@/context/video/useProgressTracking';
 import { useDownloadActions } from '@/context/video/useDownloadActions';
 import { useAccountCaptions } from './useAccountCaptions';
+import { savedSubtitleSize, subtitleSizeKey, type SubtitleSize } from '@/utils/subtitleSize';
 
 // Stable fallback references for optional props below — `receivers || []`
 // (etc.) would otherwise create a brand-new array/function on every render
@@ -97,6 +98,11 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     refreshReceivers,
 }) => {
   const { autoCaptions, chooseCaption, captionEngine, setCaptionEngine } = useAccountCaptions();
+  const [subtitleSize, setSize] = useState(savedSubtitleSize);
+  const setSubtitleSize = useCallback((size: SubtitleSize) => {
+    setSize(size);
+    try { localStorage.setItem(subtitleSizeKey, size); } catch { /* available for this playback */ }
+  }, []);
   const isTizen = isTvApp(); // Samsung or LG
 
   // --- Refs ---
@@ -324,6 +330,8 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       chooseCaption,
       captionEngine,
       setCaptionEngine,
+      subtitleSize,
+      setSubtitleSize,
       controlsVisible,
       cursorVisible,
       copied,
@@ -419,6 +427,8 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       chooseCaption,
       captionEngine,
       setCaptionEngine,
+      subtitleSize,
+      setSubtitleSize,
       controlsVisible,
       cursorVisible,
       copied,

@@ -2,6 +2,7 @@
 import { createContext, type RefObject } from 'react';
 import type { VideoFitMode, SeekOverlayData } from '@/types';
 import type { CaptionEngine } from '@/utils/liveCaptions/preference';
+import type { SubtitleSize } from '@/utils/subtitleSize';
 import type { MediaProviderAdapter } from '@vidstack/react';
 
 export interface VideoContextType {
@@ -10,6 +11,8 @@ export interface VideoContextType {
   autoCaptions: boolean;
   captionEngine: CaptionEngine;
   setCaptionEngine: (engine: CaptionEngine) => void;
+  subtitleSize: SubtitleSize;
+  setSubtitleSize: (size: SubtitleSize) => void;
   chooseCaption: (trackId?: string) => void;
   playerContainerRef: RefObject<HTMLDivElement | null>;
   settingsMenuRef: RefObject<HTMLDivElement | null>;
@@ -112,8 +115,8 @@ export interface VideoContextType {
   handleCopyLink: () => void;
   handleDownload: (via?: string) => void;
   searchOnlineSubtitles: (query?: string | import('./useSubtitles').SubtitleQuery) => Promise<any[]>;
-  addOnlineSubtitle: (result: { fileId: number; language: string; releaseName: string }) => string;
-  addLocalSubtitleFile: (file: File) => Promise<void>;
+  addOnlineSubtitle: (result: import('@/api/types/subtitles').OnlineSubtitleResult, vtt: string) => string;
+  addLocalSubtitleFile: (file: File) => Promise<string | undefined>;
   clearSubtitleSearch: () => void;
 }
 

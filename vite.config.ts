@@ -21,6 +21,10 @@ const ESBUILD_TARGETS = ['chrome68', 'safari12', 'ios12', 'firefox78', 'edge79']
 const API = process.env.PORTALCAST_SERVER || 'http://localhost:3000';
 
 export default defineConfig({
+  // Worktrees can share node_modules. Each running UI needs its own optimized chunks.
+  cacheDir: '.vite',
+  // Loading the subtitle parser mid-movie must not trigger a dependency rebuild and page reload.
+  optimizeDeps: { include: ['media-captions'] },
   plugins: [
     react(),
     // Modern (ES module) chunks only, compiled for SUPPORTED, plus the core-js polyfills they need

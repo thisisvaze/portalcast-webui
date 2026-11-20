@@ -44,6 +44,7 @@ const VideoPlayerContent: React.FC = () => {
     controlsVisible,
     autoCaptions,
     captionEngine,
+    subtitleSize,
     cursorVisible,
     useProxy,
     showChannelList,
@@ -156,7 +157,7 @@ const VideoPlayerContent: React.FC = () => {
       const showing = tracks.find((tr) => tr?.mode === 'showing');
       const seconds = Number(player.duration);
       tracker.tick({
-        key: onlineSubtitleKey(showing?.src),
+        key: onlineSubtitleKey(showing?.src, showing?.id),
         playing: player.paused === false,
         durationMs: Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0,
         delayMs: getSubtitleDelay(),
@@ -254,6 +255,7 @@ const VideoPlayerContent: React.FC = () => {
         <MediaPlayer
           key={playerKey}
           className="media-provider h-full w-full"
+          data-subtitle-size={subtitleSize}
           title={
             item?.title || seriesItem?.title || channelInfo?.name || 'Video'
           }
@@ -290,9 +292,10 @@ const VideoPlayerContent: React.FC = () => {
                 default={index === 0}
               />
             ))}
-            {subtitles?.map((sub: any, index: number) => (
+            {subtitles?.map((sub) => (
               <track
-                key={`dynamic-sub-${sub.id}-${index}`}
+                key={sub.id}
+                id={String(sub.id)}
                 src={sub.src}
                 kind="subtitles"
                 label={sub.label}

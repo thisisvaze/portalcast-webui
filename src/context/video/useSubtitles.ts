@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { getBaseUrl } from '@/api/config';
-import { subtitleDownloadUrl } from '@/utils/subtitleDownload';
+import { subtitleVtt } from '@/utils/subtitleVtt';
+import type { OnlineSubtitleResult } from '@/api/types/subtitles';
 import { noteOnlineSubtitle } from '@/utils/subtitleKept';
 import { getSubtitleDelay, setSubtitleDelay } from '@/utils/subtitleDelay';
 import { probeStreamSubtitles, searchOnlineSubtitles as apiSearchOnlineSubtitles } from '@/api/endpoints/subtitles';
@@ -30,12 +31,22 @@ export function useSubtitles(
   const [subtitleSearchLoading, setSubtitleSearchLoading] = useState(false);
   // The language of the last search (what a kept subtitle is filed under on the server).
   const searchLang = useRef('en');
+  const playback = useRef(0);
+  const subtitleUrls = useRef(new Map<string, string>());
 
   useEffect(() => {
-    if (!streamUrl || contentType === 'tv') {
-      setSubtitles([]);
-      return;
-    }
+    const urls = subtitleUrls.current;
+    return () => {
+      playback.current++;
+      urls.forEach(url => URL.revokeObjectURL(url));
+      urls.clear();
+    };
+  }, [streamUrl, rawStreamUrl, contentType]);
+
+  useEffect(() => {
+    const current = playback.current;
+    setSubtitles([]);
+    if (!streamUrl || contentType === 'tv') return;
 
     // Extension-sniffing the URL doesn't work anymore — stream URLs are opaque
     // tokens (`/api/vod/play?t=...`), never a real file extension. Use the
@@ -54,10 +65,7 @@ export function useSubtitles(
     // fallback): the server knows its tracks and the subtitle files beside it.
     // `lib=1`: a Jellyfin file played straight from Jellyfin (it still carries this server's token).
     const isLibrary = streamUrl.includes('/api/local/') || /[?&]lib=1(&|$)/.test(streamUrl);
-    if (!isProgressive && !isLibrary) {
-      setSubtitles([]);
-      return;
-    }
+    if (!isProgressive && !isLibrary) return;
 
     const fetchSubtitles = async () => {
       try {
@@ -70,7 +78,7 @@ export function useSubtitles(
 
         const b64url = btoa(rawStreamUrl!);
         const data = await probeStreamSubtitles(rawStreamUrl!, streamToken);
-        if (!data) return;
+        if (!data || current !== playback.current) return;
         const hostPart = getBaseUrl().replace("/api", "");
         // The file's own subtitle files first (Jellyfin's external subtitles, a folder's
         // .srt; servers from 2026-10-29), then the ones inside the video.
@@ -86,7 +94,8 @@ export function useSubtitles(
           srclang: sub.language || 'und',
           id: sub.index,
         }));
-        setSubtitles([...external, ...embedded]);
+        // A viewer can add a file while the server is still inspecting the movie.
+        setSubtitles(added => [...external, ...embedded, ...added]);
       } catch (err) {
         console.error("Failed to fetch subtitles:", err);
       }
@@ -132,21 +141,23 @@ export function useSubtitles(
     }
   }, [item, seriesItem, streamUrl]);
 
-  const addOnlineSubtitle = useCallback((result: { fileId: number; downloadId?: string; language: string; releaseName: string; kept?: number; keptDelayMs?: number }) => {
+  const addOnlineSubtitle = useCallback((result: OnlineSubtitleResult, vtt: string) => {
     const id = result.downloadId || `os:${result.fileId}`;
+    const trackId = `sub_${id}`;
+    const src = subtitleUrls.current.get(trackId) ?? URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+    subtitleUrls.current.set(trackId, src);
     noteOnlineSubtitle(id, searchLang.current, result.releaseName || null);
     // The timing viewers who kept this one on used, unless this viewer set one for the title.
     if (result.kept && result.keptDelayMs && getSubtitleDelay() === 0) setSubtitleDelay(result.keptDelayMs);
     const track = {
-      src: subtitleDownloadUrl(result),
+      src,
       label: `${result.language?.toUpperCase() || 'Subtitle'} — ${result.releaseName}`,
       srclang: result.language || 'und',
-      id: `sub_${id}`,
+      id: trackId,
     };
     setSubtitles((prev) => [...prev.filter((t) => t.id !== track.id), track]);
     setOnlineSubtitleResults([]);
-    toast.success('Subtitle added — select it from the Subtitles menu.');
-    return track.label;
+    return track.id;
   }, []);
 
   const clearSubtitleSearch = useCallback(() => {
@@ -154,25 +165,30 @@ export function useSubtitles(
   }, []);
 
   const addLocalSubtitleFile = useCallback(async (file: File) => {
+    const current = playback.current;
     try {
-      const raw = await file.text();
-      const isSrt = /\.srt$/i.test(file.name) || !/^WEBVTT/.test(raw.trim());
-      // Same conversion the server does for OpenSubtitles results — SRT uses "," for
-      // milliseconds, WebVTT (the only format the native <track> element understands) uses ".".
-      const vtt = isSrt
-        ? `WEBVTT\n\n${raw.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')}`
-        : raw;
-
-      const blob = new Blob([vtt], { type: 'text/vtt' });
-      const src = URL.createObjectURL(blob);
+      // FileReader honors UTF-16 byte-order marks as well as UTF-8.
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file);
+      });
+      const vtt = await subtitleVtt(content);
+      if (current !== playback.current) return;
+      const src = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
+      const key = `local_${file.name}`;
+      const previous = subtitleUrls.current.get(key);
+      subtitleUrls.current.set(key, src);
+      if (previous) URL.revokeObjectURL(previous);
       const track = {
         src,
         label: file.name.replace(/\.(srt|vtt)$/i, ''),
         srclang: 'und',
-        id: `local_${file.name}_${file.size}`,
+        id: src,
       };
-      setSubtitles((prev) => [...prev.filter((t) => t.id !== track.id), track]);
-      toast.success('Subtitle loaded — select it from the Subtitles menu.');
+      setSubtitles((prev) => [...prev.filter((t) => t.src !== previous), track]);
+      return track.id;
     } catch (err) {
       console.error('Failed to load local subtitle:', err);
       toast.error('Failed to load subtitle file.');

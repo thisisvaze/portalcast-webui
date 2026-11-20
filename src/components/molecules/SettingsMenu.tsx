@@ -3,6 +3,7 @@ import { useVideoContext } from '@/context/video';
 import { liveCaptionsSupported } from '@/utils/liveCaptions';
 import type { CaptionEngine } from '@/utils/liveCaptions/preference';
 import { formatDelay, getSubtitleDelay, setSubtitleDelay, subscribeSubtitleDelay } from '@/utils/subtitleDelay';
+import { subtitleSizes } from '@/utils/subtitleSize';
 import {
   useVideoQualityOptions,
   useAudioOptions,
@@ -13,7 +14,8 @@ import { ChevronRightIcon, CheckIcon, ChevronLeftIcon, X, ExternalLink } from 'l
 import { FaChromecast } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { absoluteStreamUrl, externalChoices, playlistFile, playlistName, type ExternalChoice } from '@/utils/externalPlayer';
-import { subtitleDownloads, subtitleFailureText } from '@/utils/subtitleDownload';
+import { downloadSubtitle, subtitleFailureText } from '@/utils/subtitleDownload';
+import type { OnlineSubtitleResult } from '@/api/types/subtitles';
 import { getDiscoverVariants, type DiscoverVariant } from '@/api/endpoints/discover';
 import { useOpenTitle } from '@/context/PersonPageContext';
 import { isContentId } from '@/utils/titleFormat';
@@ -47,6 +49,8 @@ export const SettingsMenu = React.memo(() => {
     chooseCaption,
     captionEngine,
     setCaptionEngine,
+    subtitleSize,
+    setSubtitleSize,
     streamUrl,
     item,
     seriesItem,
@@ -139,38 +143,41 @@ export const SettingsMenu = React.memo(() => {
   const captionOptions = useCaptionOptions();
   const subtitleDelay = React.useSyncExternalStore(subscribeSubtitleDelay, getSubtitleDelay);
 
-  // "Best match": the top result (made for this file first, Jellyfin's first) is added and
-  // switched on as soon as the player has loaded it.
-  const [pendingLabel, setPendingLabel] = React.useState<string | null>(null);
+  // Track registration happens after the menu click. Labels can repeat across files.
+  const [pendingTrackId, setPendingTrackId] = React.useState<string | null>(null);
   const [bestBusy, setBestBusy] = React.useState(false);
+  const download = React.useRef<AbortController | null>(null);
+  React.useEffect(() => () => download.current?.abort(), [streamUrl, isSettingsMenuOpen, activeSettingsMenu]);
   React.useEffect(() => {
-    if (!pendingLabel) return;
-    const opt = captionOptions.find((o) => o.label === pendingLabel);
+    if (!pendingTrackId) return;
+    const opt = captionOptions.find((o) => o.track?.id === pendingTrackId);
     if (opt) {
       chooseCaption(opt.track?.id);
       opt.select();
-      setPendingLabel(null);
-    }
-  }, [captionOptions, pendingLabel, chooseCaption]);
-  const addBestMatch = async () => {
-    if (bestBusy) return;
-    setBestBusy(true);
-    try {
-      const results = (await searchOnlineSubtitles?.(subQuery)) ?? [];
-      // The first of the top five that downloads (the TV app does the same).
-      let best: (typeof results)[number] | undefined;
-      for (const r of results.slice(0, 5)) {
-        if (await subtitleDownloads(r)) { best = r; break; }
-      }
-      if (!best) {
-        if (results.length) toast.error("Couldn't load a subtitle. Try one from the list.");
-        return;
-      }
-      const label = addOnlineSubtitle?.(best);
-      if (label) setPendingLabel(label);
+      setPendingTrackId(null);
       setIsSettingsMenuOpen(false);
+      toast.success(`Captions on · ${opt.label}`);
+    }
+  }, [captionOptions, pendingTrackId, chooseCaption, setIsSettingsMenuOpen]);
+  const pickOnlineSubtitle = async (picked?: OnlineSubtitleResult) => {
+    download.current?.abort();
+    const request = new AbortController();
+    download.current = request;
+    setBestBusy(!picked);
+    try {
+      const candidates = picked ? [picked] : (await searchOnlineSubtitles(subQuery)).slice(0, 5);
+      for (const candidate of candidates) {
+        if (request.signal.aborted) return;
+        const vtt = await downloadSubtitle(candidate, request.signal);
+        if (request.signal.aborted) return;
+        if (vtt) {
+          setPendingTrackId(addOnlineSubtitle(candidate, vtt));
+          return;
+        }
+      }
+      if (candidates.length) toast.error(picked ? subtitleFailureText(picked) : "Couldn't load a subtitle. Try one from the list.");
     } finally {
-      setBestBusy(false);
+      if (download.current === request) setBestBusy(false);
     }
   };
 
@@ -478,6 +485,21 @@ export const SettingsMenu = React.memo(() => {
             </button>
           ))}
 
+          <div role="group" aria-label="Subtitle size" className="border-t border-line-strong px-3 py-2">
+            <div className="mb-1 text-sm">Subtitle size</div>
+            <div className="flex gap-1">
+              {subtitleSizes.map(size => (
+                <button key={size} type="button" data-focusable="true" data-control="settings-item"
+                  aria-pressed={size === subtitleSize} data-selected={size === subtitleSize}
+                  onClick={() => setSubtitleSize(size)}
+                  className="pc-row flex flex-1 items-center justify-center gap-1 text-sm capitalize">
+                  {size === subtitleSize && <CheckIcon aria-hidden="true" className="h-4 w-4" />}
+                  {size}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {liveCaptionsSupported() && (
             <label className="flex flex-col gap-1 border-t border-line-strong px-3 py-2 text-sm">
               Auto-caption model
@@ -559,13 +581,10 @@ export const SettingsMenu = React.memo(() => {
             type="file"
             accept=".srt,.vtt"
             className="hidden"
-            onChange={(e) => {
+            onChange={async (e) => {
               const file = e.target.files?.[0];
-              if (file) {
-                addLocalSubtitleFile?.(file);
-                handleMenuChange('subtitles');
-              }
               e.target.value = '';
+              if (file) setPendingTrackId(await addLocalSubtitleFile(file) ?? null);
             }}
           />
 
@@ -607,7 +626,7 @@ export const SettingsMenu = React.memo(() => {
               <button
                 data-focusable="true"
                 data-control="settings-item"
-                onClick={() => void addBestMatch()}
+                onClick={() => void pickOnlineSubtitle()}
                 disabled={subtitleSearchLoading || bestBusy}
                 className="pc-row flex items-center justify-between text-left font-semibold disabled:opacity-50"
               >
@@ -635,21 +654,12 @@ export const SettingsMenu = React.memo(() => {
 
           {onlineSubtitleResults && onlineSubtitleResults.length > 0 && (
             <div className="flex flex-col gap-0.5">
-              {onlineSubtitleResults.map((result: any) => (
+              {onlineSubtitleResults.map((result: OnlineSubtitleResult) => (
                 <button
                   key={result.downloadId || result.fileId}
                   data-focusable="true"
                   data-control="settings-item"
-                  onClick={async () => {
-                    // Added only when it downloads: a failed file used to be added (and announced)
-                    // as an empty track (owner 2026-11-04).
-                    if (!(await subtitleDownloads(result))) {
-                      toast.error(subtitleFailureText(result));
-                      return;
-                    }
-                    addOnlineSubtitle?.(result);
-                    handleMenuChange('subtitles');
-                  }}
+                  onClick={() => void pickOnlineSubtitle(result)}
                   className="pc-row flex flex-col items-start text-left"
                 >
                   <span className="truncate text-sm">{result.releaseName}</span>

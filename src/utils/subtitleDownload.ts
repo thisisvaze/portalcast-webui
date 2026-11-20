@@ -1,5 +1,6 @@
 import { getBaseUrl } from '@/api/config';
 import { authFetch } from '@/api/client';
+import { subtitleVtt } from './subtitleVtt';
 
 export interface OnlineSubtitleRef {
   fileId: number;
@@ -23,17 +24,12 @@ export function subtitleDownloadUrl(result: OnlineSubtitleRef): string {
   return `${getBaseUrl()}/v2/subtitles/download?${query.toString()}`;
 }
 
-/**
- * Whether the subtitle can be downloaded. "Best match" tries the next result when the top one
- * cannot (owner 2026-11-04: OpenSubtitles' downloads failed and the added track stayed empty).
- * A working download is stored by the server, so the player's own request is answered from it.
- */
-export async function subtitleDownloads(result: OnlineSubtitleRef): Promise<boolean> {
+/** The track element cannot send the viewer's bearer token. Hand it the file from this request. */
+export async function downloadSubtitle(result: OnlineSubtitleRef, signal: AbortSignal): Promise<string | null> {
   try {
-    // The search and download must use the same viewer's linked subtitle account.
-    const res = await authFetch(subtitleDownloadUrl(result));
-    return res.ok;
+    const res = await authFetch(subtitleDownloadUrl(result), { signal });
+    return res.ok ? await subtitleVtt(await res.text()) : null;
   } catch {
-    return false;
+    return null;
   }
 }

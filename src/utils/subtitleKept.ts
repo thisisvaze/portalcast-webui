@@ -18,8 +18,9 @@ export function keptThresholdMs(durationMs: number): number {
 /** A changed timing counts once it has been left alone this long while playing. */
 export const KEPT_DELAY_SETTLED_MS = 60_000;
 
-/** The download id ("gd:…", "os:…") of an online subtitle track, from its src; null for others. */
-export function onlineSubtitleKey(src: string | null | undefined): string | null {
+/** Picked downloads have a blob URL and carry the provider's key in their track id. */
+export function onlineSubtitleKey(src: string | null | undefined, trackId?: string): string | null {
+  if (trackId?.startsWith('sub_') && details.has(trackId.slice(4))) return trackId.slice(4);
   if (!src) return null;
   try {
     const u = new URL(src, window.location.origin);
