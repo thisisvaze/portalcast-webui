@@ -4,6 +4,7 @@ import { liveCaptionsSupported } from '@/utils/liveCaptions';
 import type { CaptionEngine } from '@/utils/liveCaptions/preference';
 import { formatDelay, getSubtitleDelay, setSubtitleDelay, subscribeSubtitleDelay } from '@/utils/subtitleDelay';
 import { subtitleSizes } from '@/utils/subtitleSize';
+import { dialogueBoostLevels, getDialogueBoost, setDialogueBoost, subscribeDialogueBoost } from '@/utils/dialogueBoost';
 import {
   useVideoQualityOptions,
   useAudioOptions,
@@ -142,6 +143,7 @@ export const SettingsMenu = React.memo(() => {
   const audioOptions = useAudioOptions();
   const captionOptions = useCaptionOptions();
   const subtitleDelay = React.useSyncExternalStore(subscribeSubtitleDelay, getSubtitleDelay);
+  const dialogueBoost = React.useSyncExternalStore(subscribeDialogueBoost, getDialogueBoost);
 
   // Track registration happens after the menu click. Labels can repeat across files.
   const [pendingTrackId, setPendingTrackId] = React.useState<string | null>(null);
@@ -292,6 +294,23 @@ export const SettingsMenu = React.memo(() => {
                 <ChevronRightIcon className="h-4 w-4" />
               </div>
             </button>
+          )}
+
+          {typeof AudioContext !== 'undefined' && (
+            <div role="group" aria-label="Dialogue boost" className="px-3 py-2">
+              <div className="mb-1 text-sm">Dialogue boost</div>
+              <div className="flex gap-1">
+                {dialogueBoostLevels.map((level) => (
+                  <button key={level} type="button" data-focusable="true" data-control="settings-item"
+                    aria-pressed={level === dialogueBoost} data-selected={level === dialogueBoost}
+                    onClick={() => setDialogueBoost(level, playerRef.current?.el?.querySelector('video, audio'))}
+                    className="pc-row flex flex-1 items-center justify-center gap-1 text-sm capitalize">
+                    {level === dialogueBoost && <CheckIcon aria-hidden="true" className="h-4 w-4" />}
+                    {level}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           <button

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useRef } from 'react';
+import { applyDialogueBoost } from '@/utils/dialogueBoost';
 import {
   MediaPlayer,
   MediaProvider,
@@ -272,7 +273,10 @@ const VideoPlayerContent: React.FC = () => {
           load="eager"
           ref={playerRef}
           onProviderChange={onProviderChange}
-          onCanPlay={handleCanPlay}
+          onCanPlay={() => {
+            handleCanPlay();
+            void applyDialogueBoost(playerRef.current?.el?.querySelector('video, audio'));
+          }}
           volume={audio.volume}
           muted={audio.muted}
           onVolumeChange={audio.onVolumeChange}
