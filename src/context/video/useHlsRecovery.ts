@@ -1,41 +1,299 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { isHLSProvider, type MediaProviderAdapter } from '@vidstack/react';
 import { authFetch } from '@/api/client';
+import { logConnectionEvent } from '@/utils/connectionLog';
+import {
+  decideHlsErrorAction,
+  extractHlsErrorInfo,
+  extractPlayerErrorInfo,
+  isRefreshableHttpStatus,
+  MAX_URL_REFRESHES,
+  urlRefreshDelayMs,
+} from '@/utils/hlsRecoveryPolicy';
+
+export interface UseHlsRecoveryOptions {
+  contentType: 'movie' | 'series' | 'tv';
+  streamUrl: string | null | undefined;
+  playerRef: React.RefObject<any>;
+  itemId?: string | null;
+  title?: string;
+  lastGoodTimeRef?: React.RefObject<number>;
+  onRefreshStreamUrl?: (resumeAt?: number) => Promise<string | null>;
+}
 
 // Owns the hls.js error-recovery/retry state machine — extracted from
-// VideoContext.tsx. This is the logic behind the "channel keeps
-// reconnecting" investigation: vidstack only auto-recovers fatal *media*
-// errors itself; fatal *network* errors reach `handleError` with no attempt
-// at recovery, so this tries hls.js's own in-place `startLoad()` first and
-// only falls back to a full player remount (new `reloadTrigger`, which
-// re-fetches the manifest as a brand-new session) as a last resort.
-export function useHlsRecovery(
-  contentType: 'movie' | 'series' | 'tv',
-  streamUrl: string | null | undefined,
-  playerRef: React.RefObject<any>
-) {
+// VideoContext.tsx. Logs stream errors/recoveries to the connection ring buffer,
+// refreshes expired/rejected VOD stream URLs on HTTP 401/403 instead of looping
+// on a dead token, and tries hls.js's in-place startLoad()/recoverMediaError()
+// before falling back to a full player remount.
+export function useHlsRecovery({
+  contentType,
+  streamUrl,
+  playerRef,
+  itemId,
+  title,
+  lastGoodTimeRef,
+  onRefreshStreamUrl,
+}: UseHlsRecoveryOptions) {
   const hlsInstanceRef = useRef<any>(null);
+  const networkRecoveryAttempted = useRef(false);
   const mediaErrorRecoveryAttempted = useRef(false);
   const isRetrying = useRef(false);
+  const refreshInFlightRef = useRef(false);
+  const refreshCountRef = useRef(0);
+  const consecutiveForbiddenRef = useRef(0);
+  const hadErrorsRef = useRef(false);
+  const handledFatalAtRef = useRef(0);
+  const lastHlsErrorRef = useRef<{
+    status: number | null;
+    details?: string;
+    url?: string;
+    at: number;
+  } | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   const [retryCount, setRetryCount] = useState(0);
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const [isRecovering, setIsRecovering] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
-  // Called whenever playback genuinely succeeds (canplay) or a new stream
-  // starts — clears out retry/recovery bookkeeping from the previous session.
+  const retryCountRef = useRef(retryCount);
+  retryCountRef.current = retryCount;
+  const streamUrlRef = useRef(streamUrl);
+  streamUrlRef.current = streamUrl;
+  const itemIdRef = useRef(itemId);
+  itemIdRef.current = itemId;
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const onRefreshRef = useRef(onRefreshStreamUrl);
+  onRefreshRef.current = onRefreshStreamUrl;
+
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearRetryTimer();
+    };
+  }, [clearRetryTimer]);
+
+  // Reset per-title budgets only when switching to a different title/channel,
+  // not when swapping streamUrl for the same title during a 403 URL refresh.
+  useEffect(() => {
+    clearRetryTimer();
+    refreshCountRef.current = 0;
+    refreshInFlightRef.current = false;
+    consecutiveForbiddenRef.current = 0;
+    hadErrorsRef.current = false;
+    handledFatalAtRef.current = 0;
+    lastHlsErrorRef.current = null;
+    isRetrying.current = false;
+    networkRecoveryAttempted.current = false;
+    mediaErrorRecoveryAttempted.current = false;
+    setStreamError(null);
+    setRetryCount(0);
+    setIsRecovering(false);
+  }, [itemId, contentType, clearRetryTimer]);
+
+  const currentPlaybackTime = useCallback((): number | undefined => {
+    const live = Number(playerRef.current?.currentTime);
+    if (Number.isFinite(live) && live > 2) return live;
+    const saved = lastGoodTimeRef?.current ?? 0;
+    if (Number.isFinite(saved) && saved > 2) return saved;
+    return Number.isFinite(live) && live >= 0 ? live : undefined;
+  }, [playerRef, lastGoodTimeRef]);
+
+  // Called when streamUrl changes (including after a URL refresh) — clears
+  // transient retry flags while preserving refreshCountRef/hadErrorsRef so a
+  // repeated 403 after refresh cannot loop forever.
   const resetRecoveryState = useCallback(() => {
+    clearRetryTimer();
     setIsRecovering(false);
     isRetrying.current = false;
-    setRetryCount(0);
+    refreshInFlightRef.current = false;
+    consecutiveForbiddenRef.current = 0;
+    lastHlsErrorRef.current = null;
+    networkRecoveryAttempted.current = false;
     mediaErrorRecoveryAttempted.current = false;
-  }, []);
+    if (refreshCountRef.current === 0) {
+      setRetryCount(0);
+    }
+  }, [clearRetryTimer]);
+
+  // Called when playback genuinely succeeds (canplay) — clears all recovery
+  // budgets and logs recovery if this playback had hit errors.
+  const markPlaybackRecovered = useCallback(() => {
+    if (hadErrorsRef.current) {
+      logConnectionEvent({
+        source: 'player',
+        event: 'stream-recovery',
+        level: 'info',
+        action: 'recovered',
+        retryCount: refreshCountRef.current || retryCountRef.current,
+        contentType,
+        title: titleRef.current,
+        currentTime: currentPlaybackTime(),
+        url: streamUrlRef.current || undefined,
+      });
+    }
+    hadErrorsRef.current = false;
+    refreshCountRef.current = 0;
+    handledFatalAtRef.current = 0;
+    setRetryCount(0);
+    resetRecoveryState();
+  }, [contentType, currentPlaybackTime, resetRecoveryState]);
+
+  const triggerUrlRefresh = useCallback(
+    async (status: number | null, delayMs: number, reason?: string): Promise<boolean> => {
+      if (refreshInFlightRef.current || !onRefreshRef.current) return false;
+      clearRetryTimer();
+
+      const targetItemId = itemIdRef.current;
+      refreshInFlightRef.current = true;
+      isRetrying.current = true;
+      hadErrorsRef.current = true;
+      setIsRecovering(true);
+
+      const attempt = refreshCountRef.current + 1;
+      refreshCountRef.current = attempt;
+      setRetryCount(attempt);
+
+      const resumeAt = currentPlaybackTime();
+      try {
+        hlsInstanceRef.current?.stopLoad?.();
+      } catch {
+        // Ignore stopLoad errors on torn-down instances.
+      }
+
+      logConnectionEvent({
+        source: 'player',
+        event: 'stream-recovery',
+        level: 'warn',
+        action: 'refresh-url',
+        status,
+        retryCount: attempt,
+        reason,
+        contentType,
+        title: titleRef.current,
+        currentTime: resumeAt,
+        url: streamUrlRef.current || undefined,
+      });
+
+      if (delayMs > 0) {
+        await new Promise<void>((resolve) => {
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            resolve();
+          }, delayMs);
+        });
+        if (!mountedRef.current || itemIdRef.current !== targetItemId) {
+          refreshInFlightRef.current = false;
+          isRetrying.current = false;
+          return false;
+        }
+      }
+
+      try {
+        const freshUrl = await onRefreshRef.current(resumeAt);
+        if (!mountedRef.current || itemIdRef.current !== targetItemId) {
+          refreshInFlightRef.current = false;
+          isRetrying.current = false;
+          return false;
+        }
+        if (freshUrl) {
+          logConnectionEvent({
+            source: 'player',
+            event: 'stream-recovery',
+            level: 'info',
+            action: 'refresh-url-ok',
+            status,
+            retryCount: attempt,
+            contentType,
+            title: titleRef.current,
+            currentTime: resumeAt,
+            url: freshUrl,
+          });
+          consecutiveForbiddenRef.current = 0;
+          refreshInFlightRef.current = false;
+          isRetrying.current = false;
+          if (freshUrl === streamUrlRef.current) {
+            setReloadTrigger((prev) => prev + 1);
+            setIsRecovering(false);
+          }
+          return true;
+        }
+
+        logConnectionEvent({
+          source: 'player',
+          event: 'stream-recovery',
+          level: 'error',
+          action: 'refresh-url-failed',
+          status,
+          retryCount: attempt,
+          reason: 'no-fresh-url',
+          contentType,
+          title: titleRef.current,
+          currentTime: resumeAt,
+        });
+      } catch (err: any) {
+        logConnectionEvent({
+          source: 'player',
+          event: 'stream-recovery',
+          level: 'error',
+          action: 'refresh-url-failed',
+          status,
+          retryCount: attempt,
+          reason: err?.message || String(err),
+          contentType,
+          title: titleRef.current,
+          currentTime: resumeAt,
+        });
+      }
+
+      if (!mountedRef.current || itemIdRef.current !== targetItemId) {
+        refreshInFlightRef.current = false;
+        isRetrying.current = false;
+        return false;
+      }
+
+      refreshInFlightRef.current = false;
+      isRetrying.current = false;
+
+      if (attempt < MAX_URL_REFRESHES) {
+        return triggerUrlRefresh(status, urlRefreshDelayMs(attempt), 'retry-after-refresh-error');
+      }
+
+      logConnectionEvent({
+        source: 'player',
+        event: 'stream-recovery',
+        level: 'error',
+        action: 'give-up',
+        status,
+        retryCount: attempt,
+        reason: 'refresh-failed',
+        contentType,
+        title: titleRef.current,
+        currentTime: resumeAt,
+      });
+      setIsRecovering(false);
+      toast.error(`Stream access rejected by provider (${status ?? 403}). Please try again shortly.`);
+      return false;
+    },
+    [clearRetryTimer, contentType, currentPlaybackTime]
+  );
 
   const onProviderChange = useCallback(
     (provider: MediaProviderAdapter | null) => {
+      hlsInstanceRef.current = null;
       if (provider && isHLSProvider(provider)) {
         provider.config = {
           enableSoftwareAES: true,
@@ -56,50 +314,157 @@ export function useHlsRecovery(
         (provider as any).onInstance?.((hlsInstance: any) => {
           hlsInstanceRef.current = hlsInstance;
           if (!hlsInstance) return;
+          networkRecoveryAttempted.current = false;
           mediaErrorRecoveryAttempted.current = false;
+
+          hlsInstance.on('hlsFragLoaded', () => {
+            consecutiveForbiddenRef.current = 0;
+            networkRecoveryAttempted.current = false;
+          });
+
           hlsInstance.on('hlsError', (_event: any, data: any) => {
-            // Non-fatal errors (a single dropped fragment, a level load
-            // hiccup, etc.) are already being retried internally by hls.js
-            // per the fragLoadingMaxRetry/levelLoadingMaxRetry config above —
-            // acting on them here (tearing down the whole player) just races
-            // hls.js's own recovery and is what caused the "reconnecting" loop
-            // even while segments were loading fine (VLC, hitting the same
-            // proxy URL, never sees this because it has no such layer).
-            if (!data.fatal) return;
+            const info = extractHlsErrorInfo(data);
+            if (isRefreshableHttpStatus(info.status)) {
+              consecutiveForbiddenRef.current += 1;
+            } else if (info.status !== null) {
+              consecutiveForbiddenRef.current = 0;
+            }
 
-            const isNetwork404 =
-              data.response?.status === 404 ||
-              data.response?.code === 404 ||
-              data.details?.includes('404') ||
-              data.reason?.includes('404');
+            lastHlsErrorRef.current = {
+              status: info.status,
+              details: info.details,
+              url: info.url,
+              at: Date.now(),
+            };
+            hadErrorsRef.current = true;
 
-            if (isNetwork404) {
-              if (contentType === 'tv') {
-                setStreamError('Channel is not available 404 status');
-                setIsRecovering(false);
-              }
+            logConnectionEvent({
+              source: 'player',
+              event: 'hls-error',
+              level: info.fatal ? 'error' : 'warn',
+              status: info.status,
+              fatal: info.fatal,
+              type: info.type,
+              details: info.details,
+              reason: info.reason,
+              url: info.url || streamUrlRef.current || undefined,
+              title: titleRef.current,
+              contentType,
+              currentTime: currentPlaybackTime(),
+              retryCount: retryCountRef.current,
+            });
+
+            if (refreshInFlightRef.current) return;
+
+            const action = decideHlsErrorAction({
+              contentType,
+              type: info.type,
+              fatal: info.fatal,
+              status: info.status,
+              consecutiveForbidden: consecutiveForbiddenRef.current,
+              canRefreshUrl: Boolean(onRefreshRef.current),
+              refreshCount: refreshCountRef.current,
+              networkRecoveryAttempted: networkRecoveryAttempted.current,
+              mediaErrorRecoveryAttempted: mediaErrorRecoveryAttempted.current,
+            });
+
+            if (action.kind === 'ignore' || action.kind === 'fallback-handle-error') {
               return;
             }
 
-            // For other fatal errors, try hls.js's own in-place recovery
-            // (recommended by hls.js docs) before falling back to the
-            // destructive full-player remount in handleError — that remount
-            // re-fetches the manifest as a brand-new session (new server
-            // token) and is visibly disruptive, so it should be the last
-            // resort, not the first response to a fatal error.
-            if (data.type === 'networkError') {
+            if (action.kind === 'not-found') {
+              handledFatalAtRef.current = Date.now();
+              setStreamError('Channel is not available 404 status');
+              setIsRecovering(false);
+              logConnectionEvent({
+                source: 'player',
+                event: 'stream-recovery',
+                level: 'error',
+                action: 'give-up',
+                status: 404,
+                reason: 'channel-not-found',
+                contentType,
+                title: titleRef.current,
+                url: info.url || streamUrlRef.current || undefined,
+              });
+              return;
+            }
+
+            if (action.kind === 'refresh-url') {
+              handledFatalAtRef.current = Date.now();
+              void triggerUrlRefresh(info.status, action.delayMs, info.details || 'hls-auth-error');
+              return;
+            }
+
+            if (action.kind === 'forbidden-exhausted') {
+              handledFatalAtRef.current = Date.now();
+              try {
+                hlsInstance.stopLoad();
+              } catch {
+                // Ignore stopLoad errors.
+              }
+              setIsRecovering(false);
+              logConnectionEvent({
+                source: 'player',
+                event: 'stream-recovery',
+                level: 'error',
+                action: 'give-up',
+                status: info.status,
+                retryCount: refreshCountRef.current,
+                reason: 'refresh-limit-reached',
+                contentType,
+                title: titleRef.current,
+                currentTime: currentPlaybackTime(),
+                url: info.url || streamUrlRef.current || undefined,
+              });
+              toast.error(`Stream access rejected by provider (${info.status ?? 403}). Please try again shortly.`);
+              return;
+            }
+
+            if (action.kind === 'start-load') {
+              networkRecoveryAttempted.current = true;
+              handledFatalAtRef.current = Date.now();
+              logConnectionEvent({
+                source: 'player',
+                event: 'stream-recovery',
+                level: 'warn',
+                action: 'start-load',
+                status: info.status,
+                details: info.details,
+                contentType,
+                title: titleRef.current,
+                currentTime: currentPlaybackTime(),
+                url: info.url || streamUrlRef.current || undefined,
+              });
               try {
                 hlsInstance.startLoad();
                 return;
               } catch (e) {
+                handledFatalAtRef.current = 0;
                 console.error('[VideoPlayer] startLoad() failed, falling back to remount', e);
               }
-            } else if (data.type === 'mediaError' && !mediaErrorRecoveryAttempted.current) {
+              return;
+            }
+
+            if (action.kind === 'recover-media') {
               mediaErrorRecoveryAttempted.current = true;
+              handledFatalAtRef.current = Date.now();
+              logConnectionEvent({
+                source: 'player',
+                event: 'stream-recovery',
+                level: 'warn',
+                action: 'recover-media',
+                details: info.details,
+                contentType,
+                title: titleRef.current,
+                currentTime: currentPlaybackTime(),
+                url: info.url || streamUrlRef.current || undefined,
+              });
               try {
                 hlsInstance.recoverMediaError();
                 return;
               } catch (e) {
+                handledFatalAtRef.current = 0;
                 console.error('[VideoPlayer] recoverMediaError() failed, falling back to remount', e);
               }
             }
@@ -107,33 +472,111 @@ export function useHlsRecovery(
         });
       }
     },
-    [contentType]
+    [contentType, currentPlaybackTime, triggerUrlRefresh]
   );
 
   const handleError = useCallback(
     async (event: any) => {
-      if (isRetrying.current) return;
-      const error = event?.detail || event?.error || playerRef.current?.error || playerRef.current?.state?.error;
+      if (isRetrying.current || refreshInFlightRef.current) return;
 
-      let is404 = false;
+      // Vidstack's internal hlsError listener fires before ours on the same tick;
+      // yield a microtask so our hlsError listener logs details and starts any
+      // in-place recovery or VOD 403 URL refresh before we decide to remount.
+      await Promise.resolve();
+      if (!mountedRef.current || isRetrying.current || refreshInFlightRef.current) return;
+      if (Date.now() - handledFatalAtRef.current < 150) return;
+
+      const error = event?.detail || event?.error || playerRef.current?.error || playerRef.current?.state?.error;
+      const playerErr = extractPlayerErrorInfo(error);
+      const recentHls =
+        lastHlsErrorRef.current && Date.now() - lastHlsErrorRef.current.at < 2000
+          ? lastHlsErrorRef.current
+          : null;
+
+      let status = playerErr.status ?? recentHls?.status ?? null;
+      hadErrorsRef.current = true;
+
+      logConnectionEvent({
+        source: 'player',
+        event: 'player-error',
+        level: 'error',
+        status,
+        details: recentHls?.details,
+        reason: playerErr.message,
+        url: recentHls?.url || streamUrlRef.current || undefined,
+        title: titleRef.current,
+        contentType,
+        currentTime: currentPlaybackTime(),
+        retryCount: retryCountRef.current,
+      });
+
+      // Progressive (non-HLS) VOD errors don't carry an HTTP status on MediaError.
+      // Probe one byte so expired/403 progressive links refresh cleanly instead of
+      // failing out on code 4 or remounting the same dead token.
       if (
-        error?.code === 4 ||
-        error?.message?.includes('404') ||
-        String(error)?.includes('404')
+        contentType !== 'tv' &&
+        status === null &&
+        !hlsInstanceRef.current &&
+        streamUrlRef.current &&
+        onRefreshRef.current
       ) {
-        is404 = true;
+        try {
+          const probe = await authFetch(streamUrlRef.current, {
+            method: 'GET',
+            headers: { Range: 'bytes=0-0' },
+            signal: AbortSignal.timeout(3000),
+          });
+          try {
+            void probe.body?.cancel?.();
+          } catch {
+            // Ignore cancel errors.
+          }
+          if (!mountedRef.current || isRetrying.current || refreshInFlightRef.current) return;
+          if (probe.status >= 400) {
+            status = probe.status;
+          }
+        } catch {
+          // Network unreachable or timed out — continue to normal retry path.
+        }
       }
 
-      // vidstack's HLS provider only auto-recovers fatal *media* errors
-      // (it calls hls.recoverMediaError() itself); fatal *network* errors go
-      // straight to this handler with no attempt at recovery. hls.js's own
-      // docs recommend hls.startLoad() as the cheap, in-place fix for those —
-      // try it once before falling back to a full player remount, which tears
-      // down and re-fetches everything as a brand-new session (visible
-      // freeze, new server-side token) for what's often just a momentary
-      // network blip that a live stream naturally recovers from on retry.
-      if (!is404 && contentType === 'tv' && !mediaErrorRecoveryAttempted.current && hlsInstanceRef.current) {
-        mediaErrorRecoveryAttempted.current = true;
+      if (contentType !== 'tv' && isRefreshableHttpStatus(status) && onRefreshRef.current) {
+        if (refreshCountRef.current < MAX_URL_REFRESHES) {
+          void triggerUrlRefresh(status, urlRefreshDelayMs(refreshCountRef.current), 'player-error');
+          return;
+        }
+        logConnectionEvent({
+          source: 'player',
+          event: 'stream-recovery',
+          level: 'error',
+          action: 'give-up',
+          status,
+          retryCount: refreshCountRef.current,
+          reason: 'refresh-limit-reached',
+          contentType,
+          title: titleRef.current,
+          currentTime: currentPlaybackTime(),
+          url: streamUrlRef.current || undefined,
+        });
+        setIsRecovering(false);
+        toast.error(`Stream access rejected by provider (${status}). Please try again shortly.`);
+        return;
+      }
+
+      let is404 = status === 404 || playerErr.code === 4;
+
+      if (!is404 && contentType === 'tv' && !networkRecoveryAttempted.current && hlsInstanceRef.current) {
+        networkRecoveryAttempted.current = true;
+        logConnectionEvent({
+          source: 'player',
+          event: 'stream-recovery',
+          level: 'warn',
+          action: 'start-load',
+          status,
+          contentType,
+          title: titleRef.current,
+          url: streamUrlRef.current || undefined,
+        });
         try {
           hlsInstanceRef.current.startLoad();
           return;
@@ -142,18 +585,16 @@ export function useHlsRecovery(
         }
       }
 
-      // Check stream URL status directly if we suspect a network/resource error
-      if (!is404 && streamUrl && contentType === 'tv') {
+      // Check stream URL status directly if we suspect a network/resource error on Live TV
+      if (!is404 && streamUrlRef.current && contentType === 'tv') {
         try {
-          // Perform a fast HEAD request to check URL status
-          const response = await authFetch(streamUrl, { method: 'HEAD' });
+          const response = await authFetch(streamUrlRef.current, { method: 'HEAD' });
           if (response.status === 404) {
             is404 = true;
           }
         } catch {
-          // Try with GET and a short timeout
           try {
-            const response = await authFetch(streamUrl, { signal: AbortSignal.timeout(2000) });
+            const response = await authFetch(streamUrlRef.current, { signal: AbortSignal.timeout(2000) });
             if (response.status === 404) {
               is404 = true;
             }
@@ -161,49 +602,91 @@ export function useHlsRecovery(
             console.error('[VideoPlayer] Fetch check for 404 failed:', err);
           }
         }
+        if (!mountedRef.current || isRetrying.current || refreshInFlightRef.current) return;
       }
 
       if (is404) {
         if (contentType === 'tv') {
           setStreamError('Channel is not available 404 status');
           setIsRecovering(false);
+          logConnectionEvent({
+            source: 'player',
+            event: 'stream-recovery',
+            level: 'error',
+            action: 'give-up',
+            status: 404,
+            reason: 'channel-not-found',
+            contentType,
+            title: titleRef.current,
+            url: streamUrlRef.current || undefined,
+          });
           return;
         }
       }
 
-      if (
-        error?.code === 4 ||
-        error?.message?.includes('500')
-      ) {
+      if (playerErr.code === 4 || status === 500) {
+        logConnectionEvent({
+          source: 'player',
+          event: 'stream-recovery',
+          level: 'error',
+          action: 'give-up',
+          status: status ?? playerErr.code,
+          reason: playerErr.message || 'unrecoverable-media-error',
+          contentType,
+          title: titleRef.current,
+          currentTime: currentPlaybackTime(),
+          url: streamUrlRef.current || undefined,
+        });
         toast.error('Stream error. Please try another source.');
         return;
       }
 
-      if (retryCount < 10) {
+      const currentRetries = retryCountRef.current;
+      if (currentRetries < 10) {
+        const nextRetry = currentRetries + 1;
+        const delayMs = Math.min(1000 * Math.pow(2, currentRetries), 5000);
         isRetrying.current = true;
         setIsRecovering(true);
-        setTimeout(
-          () => {
-            setRetryCount((prev) => prev + 1);
-            setReloadTrigger((prev) => prev + 1);
-            setIsRecovering(false);
-            // A remount (reloadTrigger) doesn't change streamUrl, so the
-            // resetRecoveryState effect keyed on [streamUrl, rawStreamUrl]
-            // never refires here — without this, if the freshly remounted
-            // player fails again, handleError's isRetrying.current guard at
-            // the top would silently swallow every subsequent error forever,
-            // breaking the exponential-backoff retry chain after exactly one
-            // attempt.
-            isRetrying.current = false;
-          },
-          Math.min(1000 * Math.pow(2, retryCount), 5000)
-        );
+        logConnectionEvent({
+          source: 'player',
+          event: 'stream-recovery',
+          level: 'warn',
+          action: 'remount',
+          status,
+          retryCount: nextRetry,
+          contentType,
+          title: titleRef.current,
+          currentTime: currentPlaybackTime(),
+          url: streamUrlRef.current || undefined,
+        });
+        clearRetryTimer();
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          if (!mountedRef.current) return;
+          setRetryCount((prev) => prev + 1);
+          setReloadTrigger((prev) => prev + 1);
+          setIsRecovering(false);
+          isRetrying.current = false;
+        }, delayMs);
       } else {
+        logConnectionEvent({
+          source: 'player',
+          event: 'stream-recovery',
+          level: 'error',
+          action: 'give-up',
+          status,
+          retryCount: currentRetries,
+          reason: 'max-retries-reached',
+          contentType,
+          title: titleRef.current,
+          currentTime: currentPlaybackTime(),
+          url: streamUrlRef.current || undefined,
+        });
         toast.error('Failed to load stream after multiple attempts');
         setIsRecovering(false);
       }
     },
-    [retryCount, contentType, streamUrl, playerRef]
+    [clearRetryTimer, contentType, currentPlaybackTime, playerRef, triggerUrlRefresh]
   );
 
   return {
@@ -215,6 +698,7 @@ export function useHlsRecovery(
     setRetryCount,
     setReloadTrigger,
     resetRecoveryState,
+    markPlaybackRecovered,
     onProviderChange,
     handleError,
   };

@@ -73,8 +73,18 @@ export function useAppNavigation(
     MediaItem[] | undefined
   >(undefined);
 
+  const playbackSessionRef = useRef(0);
+  const streamRefreshRef = useRef<{
+    session: number;
+    refresh: () => Promise<{ raw: string; proxied: string }>;
+  } | null>(null);
+
   useEffect(() => {
-    if (!streamUrl) setEpisodeSnapshot(undefined);
+    if (!streamUrl) {
+      setEpisodeSnapshot(undefined);
+      playbackSessionRef.current++;
+      streamRefreshRef.current = null;
+    }
   }, [streamUrl]);
 
   const channelChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -122,7 +132,16 @@ export function useAppNavigation(
   });
 
   const openPlayer = useCallback(
-    (type: ContextType['contentType'], item: MediaItem, raw: string, proxied: string, resumeTime?: number) => {
+    (
+      type: ContextType['contentType'],
+      item: MediaItem,
+      raw: string,
+      proxied: string,
+      resumeTime?: number,
+      refresh?: () => Promise<{ raw: string; proxied: string }>
+    ) => {
+      const session = ++playbackSessionRef.current;
+      streamRefreshRef.current = refresh ? { session, refresh } : null;
       setPlaybackType(type);
       setCurrentItem(item);
       setRawStreamUrl(raw);
@@ -133,6 +152,20 @@ export function useAppNavigation(
     },
     []
   );
+
+  const refreshStreamUrl = useCallback(async (resumeAt?: number): Promise<string | null> => {
+    const active = streamRefreshRef.current;
+    if (!active) return null;
+    const { session, refresh } = active;
+    const fresh = await refresh();
+    if (playbackSessionRef.current !== session) return null;
+    setRawStreamUrl(fresh.raw);
+    setStreamUrl(fresh.proxied);
+    if (resumeAt !== undefined && Number.isFinite(resumeAt) && resumeAt > 2) {
+      setResumePlaybackState({ currentTime: resumeAt });
+    }
+    return fresh.proxied;
+  }, []);
 
   const playContinueWatching = useCallback(
     async (item: MediaItem) => {
@@ -254,12 +287,16 @@ export function useAppNavigation(
       const streamCategory = item.genres_str || item.tv_genre_id || item.category_id;
       if (streamCategory) urlParams.category = String(streamCategory);
 
-      const linkData = (await getMovieUrl(urlParams)) as Record<string, any>;
-      const freshCmd = linkData?.js?.cmd || linkData?.cmd;
-      if (typeof freshCmd !== 'string')
-        throw new Error('Fresh stream URL not found.');
+      const resolveFresh = async () => {
+        const linkData = (await getMovieUrl(urlParams)) as Record<string, any>;
+        const freshCmd = linkData?.js?.cmd || linkData?.cmd;
+        if (typeof freshCmd !== 'string')
+          throw new Error('Fresh stream URL not found.');
+        return { raw: freshCmd, proxied: freshCmd };
+      };
+      const { raw: freshRaw, proxied: freshProxied } = await resolveFresh();
 
-      openPlayer(isEpisodeCWT ? 'series' : 'movie', resumeItem, freshCmd, freshCmd, savedResumeTime);
+      openPlayer(isEpisodeCWT ? 'series' : 'movie', resumeItem, freshRaw, freshProxied, savedResumeTime, resolveFresh);
     },
     [contentType, context, focusedIndex, items, totalItemsCount, detailItem, showDiscover, variantPickerItem, variantPickerOptions, setHistory, isFromContinueWatching, openPlayer]
   );
@@ -337,12 +374,13 @@ export function useAppNavigation(
             || item.genres_str
             || item.category_id;
 
-          const { raw, proxied } = await resolveStreamUrl(
+          const resolveFresh = () => resolveStreamUrl(
             episodeFile,
             item.series_number,
             { title: displayTitle, category: displayCategory ? String(displayCategory) : undefined },
             { itemId: item.id, itemType: 'episode' }
           );
+          const { raw, proxied } = await resolveFresh();
 
           // Fetched directly (not via fetchData/items — see episodeSnapshot's
           // own comment above) so Next/Prev Episode has the real season list
@@ -356,7 +394,7 @@ export function useAppNavigation(
               .catch((e) => console.error('Failed to load episode list for Next/Prev Episode:', e));
           }
 
-          openPlayer('series', enrichedItem, raw, proxied, getResumeTime());
+          openPlayer('series', enrichedItem, raw, proxied, getResumeTime(), resolveFresh);
         } catch (err) {
           console.error(err);
           toast.error('Could not fetch stream URL.');
@@ -384,13 +422,14 @@ export function useAppNavigation(
         const finalMovieItem = { ...movieFile, ...filteredItem, catalogId: item.catalogId || `movie_${id}` };
         const movieCategory = item.genres_str || item.category_id;
         const listItemId = item.catalogId ? String(item.catalogId).replace(/^movie_/, '') : item.cmd ? undefined : id;
-        const { raw, proxied } = await resolveStreamUrl(
+        const resolveFresh = () => resolveStreamUrl(
           movieFile,
           undefined,
           { title: item.title || item.name, category: movieCategory ? String(movieCategory) : undefined },
           { itemId: listItemId, itemType: 'movie' }
         );
-        openPlayer('movie', finalMovieItem, raw, proxied, resumeAt ?? getResumeTime());
+        const { raw, proxied } = await resolveFresh();
+        openPlayer('movie', finalMovieItem, raw, proxied, resumeAt ?? getResumeTime(), resolveFresh);
       } catch (err) {
         console.error(err);
         toast.error('Could not fetch stream details.');
@@ -561,6 +600,8 @@ export function useAppNavigation(
       castRawStreamUrl?: string,
       castContentType?: 'movie' | 'series' | 'tv'
     ) => {
+      playbackSessionRef.current++;
+      streamRefreshRef.current = null;
       setPlaybackType(castContentType ?? (media.is_episode || media.type === 'series' ? 'series'
         : media.is_playable_movie || media.type === 'movie' ? 'movie' : media.tv_genre_id != null ? 'tv' : 'movie'));
       setCurrentItem(media);
@@ -638,6 +679,7 @@ export function useAppNavigation(
     playCastedMedia,
     pushFrame,
     startPlayback,
+    refreshStreamUrl,
     playChannel,
     episodeSnapshot,
     backTargets,

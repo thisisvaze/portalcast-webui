@@ -139,6 +139,7 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
     pushFrame,
     playChannel,
     startPlayback,
+    refreshStreamUrl,
     focusedIndex,
     setFocusedIndex,
     episodeSnapshot,
@@ -596,6 +597,7 @@ function TVPortal({ onShowAdmin }: { onShowAdmin: () => void }) {
           initialPlaybackState={
             resumePlaybackState || pendingPlaybackState || undefined
           }
+          onRefreshStreamUrl={refreshStreamUrl}
         />
         </React.Suspense>
       ) : (

@@ -41,6 +41,7 @@ export interface VideoPlayerProps {
     subtitleTrackIndex?: number;
     audioTrackIndex?: number;
   };
+  onRefreshStreamUrl?: (resumeAt?: number) => Promise<string | null>;
 }
 
 export interface SeekOverlayData {

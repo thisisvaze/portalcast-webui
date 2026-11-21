@@ -63,6 +63,7 @@ interface VideoProviderProps {
   isReceiver?: boolean;
   castTo?: (deviceId: string, media: any, state: any) => void;
   refreshReceivers?: () => void;
+  onRefreshStreamUrl?: (resumeAt?: number) => Promise<string | null>;
 }
 
 export const VideoProvider: React.FC<VideoProviderProps> = ({
@@ -96,6 +97,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
   isReceiver,
   castTo,
     refreshReceivers,
+  onRefreshStreamUrl,
 }) => {
   const { autoCaptions, chooseCaption, captionEngine, setCaptionEngine } = useAccountCaptions();
   const [subtitleSize, setSize] = useState(savedSubtitleSize);
@@ -162,18 +164,43 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     return () => clearInterval(interval);
   }, [contentType]);
 
+  const initialTimeRef = useRef<number>(0);
+  initialTimeRef.current = Number.isFinite(initialPlaybackState?.currentTime)
+    ? Number(initialPlaybackState.currentTime)
+    : 0;
+  const lastGoodTimeRef = useRef<number>(initialTimeRef.current);
+  useEffect(() => {
+    lastGoodTimeRef.current = initialTimeRef.current > 0 ? initialTimeRef.current : 0;
+  }, [itemId, contentType]);
+  useEffect(() => {
+    const initTime = Number(initialPlaybackState?.currentTime);
+    if (Number.isFinite(initTime) && initTime > 2 && lastGoodTimeRef.current <= 2) {
+      lastGoodTimeRef.current = initTime;
+    }
+  }, [initialPlaybackState?.currentTime]);
+
+  const playerTitle = item?.title || seriesItem?.title || channelInfo?.name || undefined;
+
   const {
     retryCount,
     reloadTrigger,
     isRecovering,
     streamError,
     setStreamError,
-    setRetryCount,
     setReloadTrigger,
     resetRecoveryState,
+    markPlaybackRecovered,
     onProviderChange,
     handleError,
-  } = useHlsRecovery(contentType, streamUrl, playerRef);
+  } = useHlsRecovery({
+    contentType,
+    streamUrl,
+    playerRef,
+    itemId,
+    title: playerTitle,
+    lastGoodTimeRef,
+    onRefreshStreamUrl,
+  });
 
   const {
     subtitles,
@@ -188,13 +215,13 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     clearSubtitleSearch,
     pickOnlineSubtitle,
     cancelOnlineSubtitle,
-  } = useSubtitles(streamUrl, rawStreamUrl, contentType, item, seriesItem);
+  } = useSubtitles(streamUrl, rawStreamUrl, contentType, item, seriesItem, itemId);
 
   const {
     showNextEpisodeButton,
     setShowNextEpisodeButton,
     saveProgress,
-    handleTimeUpdate,
+    handleTimeUpdate: trackTimeUpdate,
     handleEnded,
     playNextEpisode,
     playPrevEpisode,
@@ -214,6 +241,14 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     streamUrl,
     resetRecoveryState,
   });
+
+  const handleTimeUpdate = useCallback(() => {
+    if (contentType !== 'tv') {
+      const t = Number(playerRef.current?.currentTime);
+      if (Number.isFinite(t) && t > 2) lastGoodTimeRef.current = t;
+    }
+    trackTimeUpdate();
+  }, [contentType, trackTimeUpdate]);
 
   const { copied, handleCopyLink, handleDownload } = useDownloadActions({
     item,
@@ -307,8 +342,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
 
   useEffect(() => {
     setStreamError(null);
-    setRetryCount(0);
-  }, [itemId, streamUrl, setStreamError, setRetryCount]);
+  }, [itemId, streamUrl, setStreamError]);
 
   useEffect(() => {
     if (previewChannelInfo) showControlsAndCursor();
@@ -423,7 +457,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       setUseProxy: handleProxyToggle,
       handleCast,
       onProviderChange,
-      handleCanPlay: resetRecoveryState,
+      handleCanPlay: markPlaybackRecovered,
       handleTimeUpdate,
       handleError,
       handleEnded,
@@ -512,7 +546,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       handleProxyToggle,
       handleCast,
       onProviderChange,
-      resetRecoveryState,
+      markPlaybackRecovered,
       handleTimeUpdate,
       handleError,
       handleEnded,

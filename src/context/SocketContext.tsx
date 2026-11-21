@@ -6,6 +6,7 @@ import { isTvApp } from '@/utils/helpers';
 import { SocketContext } from '@/context/useSocket';
 import type { Device } from '@/context/SocketContextTypes';
 import { useAuth } from '@/context/AuthContext';
+import { logConnectionEvent } from '@/utils/connectionLog';
 
 // URL_PATHS.HOST can be the literal string '/' (same-origin, see api/config.ts's
 // getServerUrl()) — socket.io-client's URL parser doesn't handle a bare '/' the
@@ -62,8 +63,39 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({
       setActiveDevices(list);
     };
 
+    let disposed = false;
+    let disconnectedAt: number | null = null;
+    let disconnectCount = 0;
+
+    const handleOffline = () => {
+      logConnectionEvent({
+        source: 'network',
+        event: 'network-offline',
+        level: 'warn',
+      });
+    };
+    const handleOnline = () => {
+      logConnectionEvent({
+        source: 'network',
+        event: 'network-online',
+        level: 'info',
+      });
+    };
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
     newSocket.on('connect', () => {
       setIsConnected(true);
+      if (disconnectedAt !== null) {
+        logConnectionEvent({
+          source: 'socket',
+          event: 'socket-reconnect',
+          level: 'info',
+          downtimeMs: Date.now() - disconnectedAt,
+          retryCount: disconnectCount,
+        });
+        disconnectedAt = null;
+      }
       
       const displayName = isReceiver ? 'TV' : 'Controller';
       const deviceName = `${displayName} (${currentDeviceId.substring(0, 4)})`;
@@ -97,11 +129,37 @@ export const SocketProvider: React.FC<{ children: ReactNode }> = ({
       }
     });
 
-    newSocket.on('disconnect', () => setIsConnected(false));
+    newSocket.on('disconnect', (reason: string) => {
+      setIsConnected(false);
+      if (disposed || reason === 'io client disconnect') return;
+      disconnectedAt = Date.now();
+      disconnectCount += 1;
+      logConnectionEvent({
+        source: 'socket',
+        event: 'socket-disconnect',
+        level: 'warn',
+        reason,
+        retryCount: disconnectCount,
+      });
+    });
+
+    newSocket.on('connect_error', (err: Error) => {
+      if (disposed) return;
+      logConnectionEvent({
+        source: 'socket',
+        event: 'socket-error',
+        level: 'error',
+        reason: err?.message || String(err),
+        retryCount: disconnectCount,
+      });
+    });
 
     setSocket(newSocket);
 
     return () => {
+      disposed = true;
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
       newSocket.off('receivers_updated');
       newSocket.off('receivers_list');
       newSocket.off('active_user_count');

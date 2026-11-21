@@ -36,8 +36,9 @@ import { useLiveCaptions } from '@/context/video/useLiveCaptions';
 import { catalogueEnglish } from '@/utils/liveCaptions/preference';
 import { getUserProgress } from '@/api/endpoints/user';
 import { playbackPositionStorage } from '@/utils/playbackPosition';
-import { captionTrackKey, planCaptionToggle, preferredSubtitleLanguage } from '@/utils/captionToggle';
+import { captionTrackKey, isUserAddedTrack, planCaptionToggle, preferredSubtitleLanguage } from '@/utils/captionToggle';
 import { showCaptionToast } from '@/utils/captionToast';
+import { logConnectionEvent } from '@/utils/connectionLog';
 
 const VideoPlayerContent: React.FC = () => {
   const {
@@ -180,10 +181,55 @@ const VideoPlayerContent: React.FC = () => {
   const episodeOverlayRef = useRef<EpisodeOverlayRef>(null);
   const speedBannerRef = useRef<HTMLDivElement>(null);
   const lastCaptionTrackKeyRef = useRef<string | null>(null);
+  const activeManualSubIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     lastCaptionTrackKeyRef.current = null;
-  }, [playerKey]);
+    activeManualSubIdRef.current = null;
+  }, [itemId, contentType]);
+
+  // Remember any active user-added subtitle (Best match or local SRT) across a
+  // same-title player remount (e.g. after a 403 stream URL refresh) and silently
+  // restore it once the new player registers its tracks.
+  useEffect(() => {
+    const player: any = playerRef.current;
+    const list: any = player?.textTracks;
+    if (!list) return;
+
+    const getTracks = (): any[] =>
+      typeof list.toArray === 'function' ? list.toArray() : Array.from(list as ArrayLike<unknown>);
+
+    const restore = () => {
+      const wantedId = activeManualSubIdRef.current;
+      if (!wantedId || pendingTrackId) return;
+      const track = getTracks().find((tr) => String(tr?.id ?? '') === wantedId);
+      if (track && track.mode !== 'showing') {
+        track.setMode('showing');
+      }
+    };
+
+    const onModeChange = () => {
+      if (playerRef.current !== player) return;
+      const tracks = getTracks();
+      const showingUser = tracks.find((tr) => tr?.mode === 'showing' && isUserAddedTrack(tr));
+      if (showingUser) {
+        activeManualSubIdRef.current = String(showingUser.id);
+        return;
+      }
+      const prevId = activeManualSubIdRef.current;
+      if (prevId && tracks.some((tr) => String(tr?.id ?? '') === prevId)) {
+        activeManualSubIdRef.current = null;
+      }
+    };
+
+    restore();
+    list.addEventListener?.('add', restore);
+    list.addEventListener?.('mode-change', onModeChange);
+    return () => {
+      list.removeEventListener?.('add', restore);
+      list.removeEventListener?.('mode-change', onModeChange);
+    };
+  }, [playerKey, subtitles, pendingTrackId, playerRef]);
 
   // Activate a newly added online or device subtitle track as soon as Vidstack registers it
   // (works whether Settings is open or closed, e.g. from the C shortcut).
@@ -297,6 +343,15 @@ const VideoPlayerContent: React.FC = () => {
       const now = Date.now();
       if (now - lastStallNudge < 3000) return;
       lastStallNudge = now;
+      logConnectionEvent({
+        source: 'player',
+        event: 'player-stalled',
+        level: 'warn',
+        contentType,
+        title: item?.title || seriesItem?.title || channelInfo?.name || undefined,
+        currentTime: Number.isFinite(player.currentTime) ? player.currentTime : undefined,
+        url: source || undefined,
+      });
       if (player.paused && (contentType === 'tv' || player.state.started)) {
         player.play().catch(() => {});
       }
@@ -309,7 +364,7 @@ const VideoPlayerContent: React.FC = () => {
       player.removeEventListener('pause', handlePause);
       player.removeEventListener('stalled', handleStalled);
     };
-  }, [playerKey, contentType, playerRef]);
+  }, [playerKey, contentType, playerRef, item?.title, seriesItem?.title, channelInfo?.name, source]);
 
   const videoSrc = useMemo<PlayerSrc>(() => {
     if (!source) return '';

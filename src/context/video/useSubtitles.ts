@@ -32,7 +32,8 @@ export function useSubtitles(
   rawStreamUrl: string | null | undefined,
   contentType: 'movie' | 'series' | 'tv',
   item: any,
-  seriesItem: any
+  seriesItem: any,
+  itemId?: string | null
 ) {
   const [subtitles, setSubtitles] = useState<any[]>([]);
   const [onlineSubtitleResults, setOnlineSubtitleResults] = useState<any[]>([]);
@@ -45,8 +46,15 @@ export function useSubtitles(
   const subtitleUrls = useRef(new Map<string, string>());
   const download = useRef<{ controller: AbortController; source: 'menu' | 'shortcut' } | null>(null);
 
+  // Key user-added subtitle lifecycle on the title/file identity rather than the
+  // ephemeral stream token so a mid-playback 403 URL refresh keeps downloaded
+  // Best match and device .srt tracks intact.
+  const titleKey = itemId ?? item?.id ?? streamUrl ?? rawStreamUrl ?? '';
+
   useEffect(() => {
     const urls = subtitleUrls.current;
+    setSubtitles([]);
+    setOnlineSubtitleResults([]);
     return () => {
       playback.current++;
       download.current?.controller.abort();
@@ -56,11 +64,14 @@ export function useSubtitles(
       urls.forEach(url => URL.revokeObjectURL(url));
       urls.clear();
     };
-  }, [streamUrl, rawStreamUrl, contentType]);
+  }, [titleKey, contentType]);
 
   useEffect(() => {
     const current = playback.current;
-    setSubtitles([]);
+    const isUserTrack = (t: any) =>
+      subtitleUrls.current.has(String(t?.id ?? '')) ||
+      Array.from(subtitleUrls.current.values()).includes(t?.src);
+    setSubtitles(prev => prev.filter(isUserTrack));
     if (!streamUrl || contentType === 'tv') return;
 
     // Extension-sniffing the URL doesn't work anymore — stream URLs are opaque
