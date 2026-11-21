@@ -95,7 +95,7 @@ export function useDiscoverNavigation({
           // fix as the movie branch's title preservation, and matches how
           // the regular Movies/Series grid builds currentSeriesItem from the
           // clicked list item directly, never from a getSeries response.
-          const resolved = { ...item, id: rawId, catalogId: item.id, is_series: 1 } as MediaItem;
+          const resolved = { ...item, id: rawId, catalogId: item.id.startsWith('series_') ? item.id : `series_${rawId}`, is_series: 1 } as MediaItem;
           pushFrame();
           // Cleared AFTER pushFrame() (not before) — pushFrame snapshots
           // whatever variantPickerItem/Options currently are, so if this open
@@ -178,7 +178,7 @@ export function useDiscoverNavigation({
             // other title had that id (owner: The Matrix opened with a 4.8 film's IMDb).
             ...titleOwnFields(item),
             category_id: resolveCategory,
-            catalogId: item.id,
+            catalogId: item.id.startsWith('movie_') ? item.id : `movie_${rawId}`,
             is_playable_movie: true,
           } as MediaItem;
           pushFrame();

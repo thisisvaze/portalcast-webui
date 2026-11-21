@@ -67,9 +67,19 @@ export function useProgressTracking({
       timestamp: Date.now(),
     };
 
-    await saveUserProgress(mediaId, dur, true, completedMeta).catch(() => {});
+    const rawCatalogId = String(seriesItem?.catalogId || item?.catalogId || '').trim();
+    const resolvedCatalogId = rawCatalogId
+      ? (/^(movie|series)_/.test(rawCatalogId) ? rawCatalogId : `${contentType === 'series' ? 'series' : 'movie'}_${rawCatalogId}`)
+      : `${contentType === 'series' ? 'series' : 'movie'}_${mediaId}`;
 
     if (contentType === 'series' && itemId && itemId !== mediaId) {
+      // Mark the finished episode completed so the season list shows it as Watched.
+      await saveUserProgress(itemId, dur, true, { ...completedMeta, catalogId: resolvedCatalogId }).catch(() => {});
+      const finishedCardId = item?._episodeCardId ? String(item._episodeCardId) : null;
+      if (finishedCardId && finishedCardId !== String(itemId) && finishedCardId !== String(mediaId)) {
+        await saveUserProgress(finishedCardId, dur, true, { ...completedMeta, catalogId: resolvedCatalogId }).catch(() => {});
+      }
+
       if (nextEp) {
         // Same blank-title guard as saveProgress() below — a blank title here
         // renders as a bare "??" in Continue Watching.
@@ -77,11 +87,12 @@ export function useProgressTracking({
         if (!nextResolvedTitle) return;
 
         const nextProgressData = {
-          id: itemId,
+          id: nextEp.id,
           playbackFileId: nextEp.id,
-          mediaId: nextEp.id,
-          itemId,
-          seasonId,
+          episodeCardId: nextEp.id,
+          mediaId,
+          itemId: nextEp.id,
+          seasonId: nextEp.season_id || seasonId,
           categoryId,
           type: contentType,
           title: nextResolvedTitle,
@@ -95,12 +106,15 @@ export function useProgressTracking({
           is_series: 1,
           cmd: nextEp.cmd || '',
           series_number: nextEp.series_number,
+          catalogId: resolvedCatalogId,
         };
-        await saveUserProgress(itemId, 0, false, nextProgressData).catch(() => {});
+        await saveUserProgress(mediaId, 0, false, nextProgressData).catch(() => {});
         await saveUserProgress(nextEp.id, 0, false, nextProgressData).catch(() => {});
       } else {
-        await saveUserProgress(itemId, dur, true, completedMeta).catch(() => {});
+        await saveUserProgress(mediaId, dur, true, { ...completedMeta, catalogId: resolvedCatalogId }).catch(() => {});
       }
+    } else {
+      await saveUserProgress(mediaId, dur, true, { ...completedMeta, catalogId: resolvedCatalogId }).catch(() => {});
     }
   }, [contentType, mediaId, itemId, episodes, item, seasonId, categoryId, seriesItem, episodeLookup, playerRef]);
 
@@ -160,10 +174,14 @@ export function useProgressTracking({
     // id), which for Discover-opened titles are NOT valid ContentMeta lookup
     // keys — that mismatch was silently breaking "Because You Watched X"
     // (basedOnTitle came back null since the lookup found nothing).
-    const catalogId = seriesItem?.catalogId || item?.catalogId || undefined;
+    const rawCatalogId = String(seriesItem?.catalogId || item?.catalogId || '').trim();
+    const catalogId = rawCatalogId
+      ? (/^(movie|series)_/.test(rawCatalogId) ? rawCatalogId : `${contentType === 'series' ? 'series' : 'movie'}_${rawCatalogId}`)
+      : `${contentType === 'series' ? 'series' : 'movie'}_${mediaId}`;
     const progressData = {
       id: targetKeyId,
       playbackFileId: itemId || mediaId,
+      episodeCardId: item?._episodeCardId || itemId || undefined,
       mediaId,
       itemId,
       seasonId,
@@ -201,6 +219,8 @@ export function useProgressTracking({
     item?.screenshot_uri,
     item?.cmd,
     item?.series_number,
+    item?.catalogId,
+    item?._episodeCardId,
     rawStreamUrl,
     playerRef,
   ]);

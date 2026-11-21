@@ -7,7 +7,8 @@ import type { MediaItem } from '@/types';
  * Stalker portals put the number only in the name ("Episode 13. Friends and Family"),
  * daily soaps put the air date there too ("2026-05-26 - Kamini Secretly…",
  * "Episode 1294. 25-07-2026 : Ep. 1294 - A Tough Time For Pushpa"), and some episodes
- * are named after the show itself ("2026-05-30 - Kamali").
+ * are named after the show itself ("2026-05-30 - Kamali") or the show and season
+ * ("Episode 1. The Big Bang Theory: Season 1").
  */
 
 const SXXEYY = /\bS\d{1,2}\s*E(\d{1,4})\b/i;
@@ -15,6 +16,9 @@ const LEADING_EPISODE = /^\s*(?:episode|ep\.?|e)\s*(\d{1,4})\s*(?:[.:\-–—)]\
 const LEADING_NUMBER = /^\s*(\d{1,4})\s*[.:\-–—)]\s+/;
 const ISO_DATE = /^\s*((?:19|20)\d{2})-(\d{1,2})-(\d{1,2})\s*(?:[.:\-–—|]\s*)?/;
 const DMY_DATE = /^\s*(\d{1,2})[-./](\d{1,2})[-./]((?:19|20)\d{2})\s*(?:[.:\-–—|]\s*)?/;
+const SEASON_ONLY = /^(?:season|s)\s*:?\s*\d{1,3}(?:\s*(?:[-–—]|to)\s*(?:\d{1,3}|current))?$/i;
+const SHOW_AND_SEASON = /^.+?\s*[:\-–—|]\s*(?:season|s)\s*:?\s*\d{1,3}(?:\s*(?:[-–—]|to)\s*(?:\d{1,3}|current))?$/i;
+const TRAILING_SERIES_SUFFIX = /\s*(?:[:\-–—|]\s*(?:season|s)\s*:?\s*\d{1,3}(?:\s*(?:[-–—]|to)\s*(?:\d{1,3}|current))?|\(\s*(?:(?:19|20)\d{2}|[A-Z]{2,3})\s*\)|\[[^\]]+\])\s*$/i;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH_WORD = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
 // "October 19, 2026" / "19 October 2026"
@@ -22,22 +26,54 @@ const MDY_WORDS = new RegExp(`^\\s*${MONTH_WORD}\\.?\\s+(\\d{1,2})(?:st|nd|rd|th
 const DMY_WORDS = new RegExp(`^\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s+${MONTH_WORD}\\.?,?\\s+((?:19|20)\\d{2})\\s*(?:[.:\\-–—|]\\s*)?`, 'i');
 const monthIndex = (word: string) => MONTHS.findIndex((m) => word.toLowerCase().startsWith(m.toLowerCase()));
 
-/** "Kamali - October 19, 2026" -> "October 19, 2026": a show-name prefix says nothing. */
-function withoutShowName(name: string, seriesTitle?: string): string {
-  const show = seriesTitle?.trim();
-  if (!show) return name;
-  const lower = name.toLowerCase();
-  if (!lower.startsWith(show.toLowerCase())) return name;
-  const rest = name.slice(show.length);
-  return /^\s*[-–—:|]/.test(rest) ? rest.replace(/^\s*[-–—:|]\s*/, '') : name;
+/** "The Big Bang Theory: Season 1 - 12 (2007)" -> "The Big Bang Theory". */
+export function baseShowName(seriesTitle?: string): string {
+  let cur = (seriesTitle ?? '').trim();
+  while (cur) {
+    const next = cur.replace(TRAILING_SERIES_SUFFIX, '').trim();
+    if (next === cur) break;
+    cur = next;
+  }
+  return cur;
 }
 
-function rawName(ep: MediaItem): string {
-  return String(ep.title || ep.name || '').trim();
+/** "Kamali - October 19, 2026" -> "October 19, 2026": a show-name prefix says nothing. */
+function withoutShowName(name: string, seriesTitle?: string): string {
+  const candidates = [seriesTitle?.trim(), baseShowName(seriesTitle)].filter((s): s is string => Boolean(s));
+  const lower = name.toLowerCase();
+  for (const show of candidates) {
+    if (!lower.startsWith(show.toLowerCase())) continue;
+    const rest = name.slice(show.length);
+    if (/^\s*[-–—:|]/.test(rest)) return rest.replace(/^\s*[-–—:|]\s*/, '');
+  }
+  return name;
 }
 
 function afterNumber(name: string): string {
   return name.replace(SXXEYY, ' ').replace(LEADING_EPISODE, '').replace(LEADING_NUMBER, '').trim();
+}
+
+function cleanCandidateTitle(raw: string, seriesTitle?: string): string {
+  let rest = withoutShowName(afterNumber(raw), seriesTitle);
+  rest = rest.replace(ISO_DATE, '').replace(DMY_DATE, '').replace(MDY_WORDS, '').replace(DMY_WORDS, '');
+  rest = rest.replace(LEADING_EPISODE, '').replace(LEADING_NUMBER, '');
+  const stripped = rest.replace(/\s+/g, ' ').trim().replace(/^[-–—:.|\s]+/, '');
+  const showLower = seriesTitle?.trim().toLowerCase() || '';
+  const baseLower = baseShowName(seriesTitle).toLowerCase();
+  const low = stripped.toLowerCase();
+  const isShowName = (Boolean(showLower) && low === showLower) || (Boolean(baseLower) && low === baseLower);
+  const isSeasonOnly = SEASON_ONLY.test(stripped);
+  const isShowAndSeason = SHOW_AND_SEASON.test(stripped);
+  return !stripped || isShowName || isSeasonOnly || isShowAndSeason ? '' : stripped;
+}
+
+function rawName(ep: MediaItem): string {
+  const title = String(ep.title || '').trim();
+  const name = String(ep.name || '').trim();
+  if (title && name && title !== name && !cleanCandidateTitle(title) && cleanCandidateTitle(name)) {
+    return name;
+  }
+  return title || name;
 }
 
 /** The number an episode carries: from its name, then episode_num; null when it has none. */
@@ -90,14 +126,13 @@ export function episodeAirDate(ep: MediaItem, seriesTitle?: string): string | nu
  * meaningful is left, including a name that is only the show's own name or a season.
  */
 export function episodeTitle(ep: MediaItem, fallbackIndex: number, seriesTitle?: string): string {
-  let rest = withoutShowName(afterNumber(rawName(ep)), seriesTitle);
-  rest = rest.replace(ISO_DATE, '').replace(DMY_DATE, '').replace(MDY_WORDS, '').replace(DMY_WORDS, '');
-  rest = rest.replace(LEADING_EPISODE, '').replace(LEADING_NUMBER, '');
-  const stripped = rest.replace(/\s+/g, ' ').trim().replace(/^[-–—:.|\s]+/, '');
-  const isShowName = !!seriesTitle && stripped.toLowerCase() === seriesTitle.trim().toLowerCase();
-  // "Episode 15. Two and a Half Men: Season 12" leaves only the season: not a title either.
-  const isSeasonOnly = /^(?:season|s)\s*\d{1,3}$/i.test(stripped);
-  return !stripped || isShowName || isSeasonOnly ? `Episode ${episodeNumber(ep, fallbackIndex)}` : stripped;
+  const title = String(ep.title || '').trim();
+  const name = String(ep.name || '').trim();
+  // Prefer a real name when the server enriched `name` from TMDB while `title` stayed placeholder.
+  const cleaned =
+    cleanCandidateTitle(title, seriesTitle) ||
+    (name && name !== title ? cleanCandidateTitle(name, seriesTitle) : '');
+  return cleaned || `Episode ${episodeNumber(ep, fallbackIndex)}`;
 }
 
 /** "21m", "1h 5m" from minutes or seconds-ish values; null when unknown. */

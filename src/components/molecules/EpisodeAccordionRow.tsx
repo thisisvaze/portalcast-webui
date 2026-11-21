@@ -93,9 +93,11 @@ const EpisodeAccordionRow = forwardRef<HTMLButtonElement, EpisodeAccordionRowPro
       )}
       <span className="min-w-0 flex-1">
         {/* A theme that drops the number column shows it here instead (Minimal). */}
-        <span data-ui="episode-kicker" className="hidden text-xs font-semibold text-fg-subtle">
-          Episode {number}
-        </span>
+        {title.toLowerCase() !== `episode ${number}` && (
+          <span data-ui="episode-kicker" className="hidden text-xs font-semibold text-fg-subtle">
+            Episode {number}
+          </span>
+        )}
         <span className="block truncate text-sm font-bold text-fg sm:text-base">{title}</span>
         {sub && <span className="mt-0.5 block truncate text-xs text-fg-muted">{sub}</span>}
         {overview && (

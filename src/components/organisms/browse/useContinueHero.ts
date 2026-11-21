@@ -3,7 +3,7 @@ import React from 'react';
 import type { ProgressRecord } from '@/api/types/user';
 import { URL_PATHS } from '@/api/config';
 import { getTitleDetails, type TitleDetails } from '@/api/endpoints/discover';
-import { continueItemsOf } from '@/utils/continueItems';
+import { continueCatalogIdOf, continueItemsOf } from '@/utils/continueItems';
 import { isContentId } from '@/utils/titleFormat';
 import { useContinueDetails } from './continueCard';
 
@@ -18,7 +18,7 @@ const urlOf = (path: string | undefined): string | null => {
 export function useContinueHero(progressRecords: ProgressRecord[]) {
   const item = React.useMemo(() => continueItemsOf(progressRecords)[0], [progressRecords]);
   const anyItem = item as any;
-  const catalogId: string = item?.catalogId ? String(item.catalogId) : '';
+  const catalogId: string = continueCatalogIdOf(item) ?? '';
   const [details, setDetails] = React.useState<TitleDetails | null>(null);
   React.useEffect(() => {
     let cancelled = false;

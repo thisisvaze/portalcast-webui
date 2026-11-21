@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { MediaItem } from '@/types';
 import type { ProgressRecord } from '@/api/types/user';
-import { timeLeft } from '@/utils/titleFormat';
+import { isContentId, timeLeft } from './titleFormat.ts';
+import { baseShowName } from './episodeInfo.ts';
 
 export interface ProgressEntry {
   id?: string;
@@ -22,6 +23,67 @@ export interface ProgressEntry {
   timestamp: number;
 }
 
+const BARE_ID = /^[\w.-]{1,120}$/;
+
+export function normalizeCatalogId(raw: unknown, isSeries: boolean): string | undefined {
+  const s = typeof raw === 'string' ? raw.trim() : typeof raw === 'number' ? String(raw) : '';
+  if (!s) return undefined;
+  if (isContentId(s)) return s;
+  if (BARE_ID.test(s)) return `${isSeries ? 'series' : 'movie'}_${s}`;
+  return undefined;
+}
+
+function titleGroupKey(title: unknown, isSeries: boolean): string | null {
+  const raw = typeof title === 'string' ? title.trim() : '';
+  if (!raw) return null;
+  const base = (isSeries ? baseShowName(raw) : raw).toLowerCase().replace(/\s+/g, ' ').trim();
+  return base ? `${isSeries ? 'series' : 'movie'}:${base}` : null;
+}
+
+function cleanContinueEpisodeLabel(episodeTitle: string | undefined, showTitle: string | undefined): string | undefined {
+  const raw = (episodeTitle || '').trim();
+  if (!raw) return undefined;
+  const show = (showTitle || '').trim();
+  const base = baseShowName(show);
+  // Strip repeated show-name prefix ("Young Sheldon – Young Sheldon: Season 1" -> "Season 1").
+  let cur = raw;
+  for (let i = 0; i < 2; i++) {
+    const low = cur.toLowerCase();
+    let changed = false;
+    for (const prefix of [show, base].filter(Boolean)) {
+      if (low.startsWith(prefix.toLowerCase())) {
+        const rest = cur.slice(prefix.length);
+        if (/^\s*[-–—:|]/.test(rest)) {
+          cur = rest.replace(/^\s*[-–—:|]\s*/, '').trim();
+          changed = true;
+          break;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+  return cur || raw;
+}
+
+/**
+ * Resolves the catalogId ("series_123" / "movie_456") for a Continue Watching item when
+ * directly known, normalizing bare ids and falling back to movie_<id> for movies.
+ */
+export function continueCatalogIdOf(item: MediaItem | undefined): string | null {
+  if (!item) return null;
+  const anyItem = item as any;
+  const isSeries =
+    Number(anyItem.is_episode) === 1 ||
+    Number(anyItem.is_series) === 1 ||
+    anyItem.cw_content_type === 'series';
+  const direct = normalizeCatalogId(anyItem.catalogId, isSeries);
+  if (direct) return direct;
+  if (!isSeries) {
+    return normalizeCatalogId(item.id, false) ?? null;
+  }
+  return null;
+}
+
 /**
  * Continue Watching cards from the viewer's progress records, newest first: unfinished,
  * not live TV, one card per title. Shared by the row and the Home hero.
@@ -29,6 +91,30 @@ export interface ProgressEntry {
 export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] {
   const items: MediaItem[] = [];
   const addedIds = new Set<string>();
+  const addedShows = new Set<string>();
+
+  // Pass 1: collect known catalogIds and backdrops across all rows (including completed
+  // ones) so an older/next-episode row missing catalogId still inherits its show's page
+  // and backdrop instead of losing the Details/(i) button.
+  const catalogByTitle = new Map<string, string>();
+  const backdropByCatalog = new Map<string, string>();
+  const backdropByTitle = new Map<string, string>();
+  const byNewest = [...progressRecords].sort(
+    (a, b) => (b.meta?.timestamp || 0) - (a.meta?.timestamp || 0)
+  );
+  for (const record of byNewest) {
+    const entry = record.meta as ProgressEntry | undefined;
+    if (!entry || entry.type === 'tv') continue;
+    const isSeries = (entry.is_series ?? 0) === 1 || entry.type === 'series';
+    const tKey = titleGroupKey(entry.title || entry.name, isSeries);
+    const cat = normalizeCatalogId(entry.catalogId, isSeries);
+    const backdrop = typeof (record as any).backdrop_path === 'string' && (record as any).backdrop_path
+      ? String((record as any).backdrop_path)
+      : undefined;
+    if (cat && tKey && !catalogByTitle.has(tKey)) catalogByTitle.set(tKey, cat);
+    if (backdrop && cat && !backdropByCatalog.has(cat)) backdropByCatalog.set(cat, backdrop);
+    if (backdrop && tKey && !backdropByTitle.has(tKey)) backdropByTitle.set(tKey, backdrop);
+  }
 
   const sortedRecords = progressRecords
     .filter((record) => !record.completed && record.meta && record.meta.type !== 'tv')
@@ -50,22 +136,45 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
       if (!displayId || addedIds.has(displayId.toString())) continue;
       if (completedMediaIds.has(displayId.toString())) continue;
 
-      const isSeries = (entry.is_series ?? 0) === 1;
-      // entry.mediaId is the EPISODE's own playback-file id (see saveProgress
-      // in useProgressTracking.ts — it's the raw `mediaId` the video element
-      // is playing), not the series' own id — using it as series_id below
-      // meant playContinueWatching's follow-up "fetch this series' episode
-      // list" call always asked for a series matching an episode's id,
-      // which never exists, so the episode list came back empty and
-      // autoplay/next-episode silently did nothing on every resume,
-      // regardless of which series or episode. entry.catalogId carries the
-      // real portal series id (stamped as `series_{realId}` whenever a
-      // series is opened normally — see setCurrentSeriesItem in
-      // useAppNavigation.ts — and persisted into every progress save from
-      // then on), so prefer stripping that instead; entry.mediaId stays as
-      // a fallback for any older saved record from before catalogId existed.
-      const seriesIdFromCatalog = entry.catalogId?.startsWith('series_')
-        ? entry.catalogId.slice('series_'.length)
+      const isSeries = (entry.is_series ?? 0) === 1 || entry.type === 'series';
+      const tKey = titleGroupKey(entry.title || entry.name, isSeries);
+      const playbackFileId = (entry as any).playbackFileId || entry.itemId || entry.mediaId;
+
+      // Resolve a valid prefixed catalogId: direct (normalized) -> inherited from a
+      // sibling row of the same title -> distinct series mediaId (ignoring legacy
+      // next-episode rows where mediaId was overwritten with playbackFileId) -> movie id.
+      let resolvedCatalogId =
+        normalizeCatalogId(entry.catalogId, isSeries) ||
+        (tKey ? catalogByTitle.get(tKey) : undefined);
+      if (!resolvedCatalogId && isSeries) {
+        const seriesMediaId = entry.mediaId ? String(entry.mediaId) : '';
+        const distinctFromEpisode =
+          seriesMediaId &&
+          seriesMediaId !== String(playbackFileId ?? '') &&
+          seriesMediaId !== String(entry.itemId ?? '');
+        if (distinctFromEpisode) {
+          resolvedCatalogId = normalizeCatalogId(seriesMediaId, true);
+        }
+      } else if (!resolvedCatalogId && !isSeries) {
+        resolvedCatalogId = normalizeCatalogId(entry.mediaId || displayId, false);
+      }
+
+      // One card per show/title: multiple episodes of the same series collapse to the newest.
+      const showKey = resolvedCatalogId || (isSeries ? tKey : null);
+      if (showKey && addedShows.has(showKey)) continue;
+
+      const seriesIdFromCatalog = resolvedCatalogId?.startsWith('series_')
+        ? resolvedCatalogId.slice('series_'.length)
+        : undefined;
+
+      const backdrop =
+        (record as any).backdrop_path ||
+        (resolvedCatalogId ? backdropByCatalog.get(resolvedCatalogId) : undefined) ||
+        (tKey ? backdropByTitle.get(tKey) : undefined) ||
+        undefined;
+
+      const episodeDetail = isSeries
+        ? cleanContinueEpisodeLabel(entry.episodeTitle, entry.title)
         : undefined;
 
       items.push({
@@ -79,13 +188,6 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
         name: isSeries
           ? `${entry.name || entry.title}${entry.episodeTitle ? ' – ' + entry.episodeTitle : ''}`
           : entry.name || entry.title,
-        // Pure series name, kept separate from the composite "Series –
-        // Episode" display string above — playContinueWatching uses this
-        // (not .title/.name) when it re-derives currentSeriesItem, so a
-        // second play from this Continue Watching card doesn't save the
-        // already-composed display string as if it were the series' own
-        // name, which would double the episode-quality suffix on every
-        // subsequent resume (title → "Series – Quality – Quality" → …).
         series_name: isSeries ? entry.title : undefined,
         series_name_alt: isSeries ? (entry.name || entry.title) : undefined,
 
@@ -100,23 +202,22 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
         cmd: entry.cmd,
         series_number: entry.series_number,
         progressPercent: entry.progressPercent,
-        catalogId: entry.catalogId,
+        catalogId: resolvedCatalogId,
 
-        playbackFileId: (entry as any).playbackFileId || entry.itemId || entry.mediaId,
+        playbackFileId,
 
         cw_content_type: entry.type,
         cw_category_id: (entry as any).categoryId || null,
 
         cw_episode_card_id: (entry as any).episodeCardId || entry.itemId || null,
 
-        // The wide card (design-system.md): the title's backdrop from the server, and
-        // "Episode title · 23 min left" under the title.
-        cw_backdrop: (record as any).backdrop_path || undefined,
+        cw_backdrop: backdrop,
         cw_show_title: entry.title,
-        cw_detail: [isSeries ? entry.episodeTitle : undefined, timeLeft(entry.duration - entry.currentTime)]
+        cw_detail: [episodeDetail, timeLeft(entry.duration - entry.currentTime)]
           .filter(Boolean).join(' · ') || undefined,
       } as any);
       addedIds.add(displayId.toString());
+      if (showKey) addedShows.add(showKey);
     } catch (err) {
       console.error(`Failed to parse CW entry for record`, record, err);
     }
