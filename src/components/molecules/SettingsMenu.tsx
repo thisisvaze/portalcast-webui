@@ -15,7 +15,6 @@ import { ChevronRightIcon, CheckIcon, ChevronLeftIcon, X, ExternalLink } from 'l
 import { FaChromecast } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { absoluteStreamUrl, externalChoices, playlistFile, playlistName, type ExternalChoice } from '@/utils/externalPlayer';
-import { downloadSubtitle, subtitleFailureText } from '@/utils/subtitleDownload';
 import type { OnlineSubtitleResult } from '@/api/types/subtitles';
 import { getDiscoverVariants, type DiscoverVariant } from '@/api/endpoints/discover';
 import { useOpenTitle } from '@/context/PersonPageContext';
@@ -43,10 +42,13 @@ export const SettingsMenu = React.memo(() => {
     handleCast,
     onlineSubtitleResults,
     subtitleSearchLoading,
+    bestSubtitleLoading,
+    setPendingTrackId,
     searchOnlineSubtitles,
-    addOnlineSubtitle,
     addLocalSubtitleFile,
     clearSubtitleSearch,
+    pickOnlineSubtitle,
+    cancelOnlineSubtitle,
     chooseCaption,
     captionEngine,
     setCaptionEngine,
@@ -145,43 +147,12 @@ export const SettingsMenu = React.memo(() => {
   const subtitleDelay = React.useSyncExternalStore(subscribeSubtitleDelay, getSubtitleDelay);
   const dialogueBoost = React.useSyncExternalStore(subscribeDialogueBoost, getDialogueBoost);
 
-  // Track registration happens after the menu click. Labels can repeat across files.
-  const [pendingTrackId, setPendingTrackId] = React.useState<string | null>(null);
-  const [bestBusy, setBestBusy] = React.useState(false);
-  const download = React.useRef<AbortController | null>(null);
-  React.useEffect(() => () => download.current?.abort(), [streamUrl, isSettingsMenuOpen, activeSettingsMenu]);
-  React.useEffect(() => {
-    if (!pendingTrackId) return;
-    const opt = captionOptions.find((o) => o.track?.id === pendingTrackId);
-    if (opt) {
-      chooseCaption(opt.track?.id);
-      opt.select();
-      setPendingTrackId(null);
-      setIsSettingsMenuOpen(false);
-      toast.success(`Captions on · ${opt.label}`);
-    }
-  }, [captionOptions, pendingTrackId, chooseCaption, setIsSettingsMenuOpen]);
-  const pickOnlineSubtitle = async (picked?: OnlineSubtitleResult) => {
-    download.current?.abort();
-    const request = new AbortController();
-    download.current = request;
-    setBestBusy(!picked);
-    try {
-      const candidates = picked ? [picked] : (await searchOnlineSubtitles(subQuery)).slice(0, 5);
-      for (const candidate of candidates) {
-        if (request.signal.aborted) return;
-        const vtt = await downloadSubtitle(candidate, request.signal);
-        if (request.signal.aborted) return;
-        if (vtt) {
-          setPendingTrackId(addOnlineSubtitle(candidate, vtt));
-          return;
-        }
-      }
-      if (candidates.length) toast.error(picked ? subtitleFailureText(picked) : "Couldn't load a subtitle. Try one from the list.");
-    } finally {
-      if (download.current === request) setBestBusy(false);
-    }
-  };
+  React.useEffect(
+    () => () => { cancelOnlineSubtitle('menu'); },
+    [streamUrl, isSettingsMenuOpen, activeSettingsMenu, cancelOnlineSubtitle]
+  );
+  const pickFromMenu = (picked?: OnlineSubtitleResult) =>
+    pickOnlineSubtitle(picked, { query: subQuery, source: 'menu' });
 
   // Close menu on click outside
   React.useEffect(() => {
@@ -645,11 +616,11 @@ export const SettingsMenu = React.memo(() => {
               <button
                 data-focusable="true"
                 data-control="settings-item"
-                onClick={() => void pickOnlineSubtitle()}
-                disabled={subtitleSearchLoading || bestBusy}
+                onClick={() => void pickFromMenu()}
+                disabled={subtitleSearchLoading || bestSubtitleLoading}
                 className="pc-row flex items-center justify-between text-left font-semibold disabled:opacity-50"
               >
-                <span>{bestBusy ? 'Finding the best match…' : 'Best match (one tap)'}</span>
+                <span>{bestSubtitleLoading ? 'Finding the best match…' : 'Best match (one tap)'}</span>
               </button>
               <button
                 data-focusable="true"
@@ -678,7 +649,7 @@ export const SettingsMenu = React.memo(() => {
                   key={result.downloadId || result.fileId}
                   data-focusable="true"
                   data-control="settings-item"
-                  onClick={() => void pickOnlineSubtitle(result)}
+                  onClick={() => void pickFromMenu(result)}
                   className="pc-row flex flex-col items-start text-left"
                 >
                   <span className="truncate text-sm">{result.releaseName}</span>

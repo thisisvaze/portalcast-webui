@@ -21,7 +21,8 @@ const TV_APP = isTvApp();
 export function useTVRemoteNavigation(
   tvChannelListRef: RefObject<TvChannelListRef | null>,
   episodeOverlayRef: RefObject<EpisodeOverlayRef | null>,
-  remote: ReturnType<typeof useMediaRemote>
+  remote: ReturnType<typeof useMediaRemote>,
+  toggleCaptions: () => void
 ) {
   const {
     playerContainerRef,
@@ -166,6 +167,13 @@ export function useTVRemoteNavigation(
         const step = e.key === '-' ? -1 : 1;
         const next = subtitleSizes[subtitleSizes.indexOf(subtitleSize) + step];
         if (next) setSubtitleSize(next);
+        return;
+      }
+      if (e.key === 'c' || e.key === 'C') {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing || e.defaultPrevented || e.repeat || showChannelList || showEpisodeList) return;
+        e.preventDefault();
+        e.stopPropagation();
+        toggleCaptions();
         return;
       }
       const wereControlsHidden = !navRef.current.isControlsVisible;
@@ -495,6 +503,7 @@ export function useTVRemoteNavigation(
     settingsMenuRef,
     subtitleSize,
     setSubtitleSize,
+    toggleCaptions,
     setControlsVisible,
     showNextEpisodeButton,
     setShowNextEpisodeButton,

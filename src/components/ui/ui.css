@@ -115,7 +115,7 @@
     --ui-toast-error: var(--color-red-500);
     --ui-toast-info: #3b82f6;
     --ui-toast-progress: linear-gradient(90deg, #3b82f6, #8b5cf6);
-    --ui-toast-progress-display: block;
+    --ui-toast-progress-opacity: 1;
     --ui-toast-motion: bounce;
     /* Glass (.ui-glass): bars and menus over the content. Classic: no blur. */
     --ui-glass-bg: rgb(11 17 32 / 0.95);
@@ -743,6 +743,8 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width:
   .ui-toast--error { --ui-toast-accent: var(--ui-toast-error); }
   .ui-toast-body {
     display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
     align-items: flex-start;
     gap: 0.625rem;
     padding: 0.75rem;
@@ -750,8 +752,12 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width:
     font-size: var(--text-sm);
     font-weight: 500;
   }
-  .ui-toast .Toastify__progress-bar--wrp,
-  .ui-toast .Toastify__progress-bar { display: var(--ui-toast-progress-display); }
+  .ui-toast-body > div:last-child { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+  /* Hide the bar with opacity rather than display:none: react-toastify auto-closes on its animationend. */
+  .ui-toast .Toastify__progress-bar--wrp {
+    opacity: var(--ui-toast-progress-opacity);
+    pointer-events: none;
+  }
   .ui-toast .Toastify__progress-bar--info { background: var(--ui-toast-progress); }
   .ui-toast .Toastify__close-button { margin: 10px 5px 0 0; color: var(--color-fg-subtle); opacity: 0.8; }
   .ui-toast .Toastify__close-button:hover { color: var(--color-fg); opacity: 1; }

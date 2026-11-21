@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { applyDialogueBoost } from '@/utils/dialogueBoost';
 import {
   MediaPlayer,
@@ -36,6 +36,8 @@ import { useLiveCaptions } from '@/context/video/useLiveCaptions';
 import { catalogueEnglish } from '@/utils/liveCaptions/preference';
 import { getUserProgress } from '@/api/endpoints/user';
 import { playbackPositionStorage } from '@/utils/playbackPosition';
+import { captionTrackKey, planCaptionToggle, preferredSubtitleLanguage } from '@/utils/captionToggle';
+import { showCaptionToast } from '@/utils/captionToast';
 
 const VideoPlayerContent: React.FC = () => {
   const {
@@ -44,6 +46,7 @@ const VideoPlayerContent: React.FC = () => {
 
     controlsVisible,
     autoCaptions,
+    chooseCaption,
     captionEngine,
     subtitleSize,
     cursorVisible,
@@ -85,11 +88,17 @@ const VideoPlayerContent: React.FC = () => {
     setCursorVisible,
     setShowChannelList,
     setShowEpisodeList,
+    setIsSettingsMenuOpen,
     onChannelSelect,
     onEpisodeSelect,
     playNextEpisode,
     onBack,
     subtitles,
+    bestSubtitleLoading,
+    pendingTrackId,
+    setPendingTrackId,
+    pickOnlineSubtitle,
+    cancelOnlineSubtitle,
     favorites,
     recentChannels,
     epgData,
@@ -170,11 +179,88 @@ const VideoPlayerContent: React.FC = () => {
   const tvChannelListRef = useRef<TvChannelListRef>(null);
   const episodeOverlayRef = useRef<EpisodeOverlayRef>(null);
   const speedBannerRef = useRef<HTMLDivElement>(null);
+  const lastCaptionTrackKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    lastCaptionTrackKeyRef.current = null;
+  }, [playerKey]);
+
+  // Activate a newly added online or device subtitle track as soon as Vidstack registers it
+  // (works whether Settings is open or closed, e.g. from the C shortcut).
+  useEffect(() => {
+    if (!pendingTrackId) return;
+    const player: any = playerRef.current;
+    const list: any = player?.textTracks;
+    if (!list) return;
+
+    const activate = () => {
+      const tracks: any[] = typeof list.toArray === 'function' ? list.toArray() : Array.from(list as ArrayLike<unknown>);
+      const index = tracks.findIndex((tr) => String(tr?.id ?? '') === String(pendingTrackId));
+      if (index < 0) return false;
+      const track = tracks[index];
+      lastCaptionTrackKeyRef.current = captionTrackKey(track);
+      chooseCaption(track.id);
+      track.setMode('showing');
+      setPendingTrackId(null);
+      setIsSettingsMenuOpen(false);
+      showCaptionToast('success', `Captions on · ${track.label}`, 2500);
+      return true;
+    };
+
+    if (activate()) return;
+    list.addEventListener?.('add', activate);
+    return () => {
+      list.removeEventListener?.('add', activate);
+    };
+  }, [pendingTrackId, subtitles, playerKey, playerRef, chooseCaption, setPendingTrackId, setIsSettingsMenuOpen]);
+
+  const toggleCaptions = useCallback(() => {
+    const player: any = playerRef.current;
+    const list: any = player?.textTracks;
+    if (!list) return;
+    const tracks: any[] = typeof list.toArray === 'function' ? list.toArray() : Array.from(list as ArrayLike<unknown>);
+    const plan = planCaptionToggle({
+      tracks,
+      contentType,
+      lastTrackKey: lastCaptionTrackKeyRef.current,
+      preferredLanguage: preferredSubtitleLanguage(),
+      isSearchingBest: bestSubtitleLoading,
+    });
+
+    switch (plan.action) {
+      case 'cancel-search':
+        cancelOnlineSubtitle();
+        showCaptionToast('info', 'Canceled subtitle search', 1500);
+        return;
+      case 'off':
+        lastCaptionTrackKeyRef.current = plan.trackKey;
+        chooseCaption(undefined);
+        tracks[plan.index]?.setMode('disabled');
+        showCaptionToast('info', 'Captions off', 1500);
+        return;
+      case 'select': {
+        const track = tracks[plan.index];
+        if (!track) return;
+        lastCaptionTrackKeyRef.current = plan.trackKey;
+        chooseCaption(track.id);
+        track.setMode('showing');
+        showCaptionToast('success', `Captions on · ${track.label || 'On'}`, 2000);
+        return;
+      }
+      case 'best-match':
+        void pickOnlineSubtitle(undefined, { source: 'shortcut' });
+        return;
+      case 'none':
+        showCaptionToast('info', 'No captions available', 2000);
+        return;
+    }
+  }, [playerRef, contentType, bestSubtitleLoading, cancelOnlineSubtitle, chooseCaption, pickOnlineSubtitle]);
 
   const { showExitToast } = useTVRemoteNavigation(
     tvChannelListRef,
     episodeOverlayRef,
-    remote
+    remote,
+    toggleCaptions
   );
   const { handleTouchStart, handleTouchEnd, lastTouchTime } = useTouchGestures(
     playerContainerRef,
@@ -289,6 +375,7 @@ const VideoPlayerContent: React.FC = () => {
             {item?.subtitles?.map((sub: any, index: number) => (
               <track
                 key={index}
+                id={sub.id ? String(sub.id) : `item_sub_${index}`}
                 src={sub.url}
                 kind="subtitles"
                 label={sub.language}

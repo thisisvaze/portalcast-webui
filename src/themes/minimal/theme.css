@@ -136,7 +136,7 @@
     --ui-toast-success: #30d158;
     --ui-toast-error: #ff453a;
     --ui-toast-info: #f5f5f7;
-    --ui-toast-progress-display: none;
+    --ui-toast-progress-opacity: 0;
     --ui-toast-motion: slide;
     /* Side panels: the same glass, a little more opaque for reading, over a dimmed page. */
     --ui-sheet-bg: rgb(28 28 30 / calc(0.78 * var(--ui-glass-opacity-scale)));
@@ -391,9 +391,9 @@ html[data-theme='minimal'] .ui-field-input {
   corner-shape: round;
 }
 
-/* Reduce Motion: things change in place instead of moving. */
+/* Reduce Motion: things change in place instead of moving. Keep the toast timer bar running. */
 @media (prefers-reduced-motion: reduce) {
-  html[data-theme='minimal'] *,
+  html[data-theme='minimal'] :not(.Toastify__progress-bar),
   html[data-theme='minimal'] *::before,
   html[data-theme='minimal'] *::after {
     transition-duration: 0.01ms !important;

@@ -55,6 +55,9 @@ export interface VideoContextType {
   subtitles?: any[];
   onlineSubtitleResults?: any[];
   subtitleSearchLoading?: boolean;
+  bestSubtitleLoading: boolean;
+  pendingTrackId: string | null;
+  setPendingTrackId: (id: string | null) => void;
   contentType: 'movie' | 'series' | 'tv';
   mediaId?: string | null;
   item?: any;
@@ -118,6 +121,11 @@ export interface VideoContextType {
   addOnlineSubtitle: (result: import('@/api/types/subtitles').OnlineSubtitleResult, vtt: string) => string;
   addLocalSubtitleFile: (file: File) => Promise<string | undefined>;
   clearSubtitleSearch: () => void;
+  pickOnlineSubtitle: (
+    picked?: import('@/api/types/subtitles').OnlineSubtitleResult,
+    options?: import('./useSubtitles').PickOnlineSubtitleOptions
+  ) => Promise<string | null>;
+  cancelOnlineSubtitle: (onlySource?: 'menu' | 'shortcut') => boolean;
 }
 
 // Create and export the Context

@@ -16,7 +16,7 @@ export default function Toaster() {
       autoClose={4000}
       newestOnTop={false}
       closeOnClick
-      pauseOnFocusLoss
+      pauseOnFocusLoss={false}
       draggable
       pauseOnHover
       theme="dark"

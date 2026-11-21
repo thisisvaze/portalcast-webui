@@ -7,9 +7,12 @@ import type { OnlineSubtitleResult } from '@/api/types/subtitles';
 import { noteOnlineSubtitle } from '@/utils/subtitleKept';
 import { getSubtitleDelay, setSubtitleDelay } from '@/utils/subtitleDelay';
 import { probeStreamSubtitles, searchOnlineSubtitles as apiSearchOnlineSubtitles } from '@/api/endpoints/subtitles';
+import { downloadSubtitle, subtitleFailureText } from '@/utils/subtitleDownload';
+import { preferredSubtitleLanguage } from '@/utils/captionToggle';
+import { showCaptionToast } from '@/utils/captionToast';
 
 // Owns subtitle track discovery (embedded-track probing for progressive VOD,
-// online search, and manual add) — extracted from VideoContext.tsx.
+// online search, one-tap Best match, and manual add) — extracted from VideoContext.tsx.
 /** What a viewer can change in the subtitle search (Settings › Captions › Add). */
 export interface SubtitleQuery {
   title?: string;
@@ -17,6 +20,11 @@ export interface SubtitleQuery {
   season?: string;
   episode?: string;
   language?: string;
+}
+
+export interface PickOnlineSubtitleOptions {
+  query?: SubtitleQuery;
+  source?: 'menu' | 'shortcut';
 }
 
 export function useSubtitles(
@@ -29,15 +37,22 @@ export function useSubtitles(
   const [subtitles, setSubtitles] = useState<any[]>([]);
   const [onlineSubtitleResults, setOnlineSubtitleResults] = useState<any[]>([]);
   const [subtitleSearchLoading, setSubtitleSearchLoading] = useState(false);
+  const [bestSubtitleLoading, setBestSubtitleLoading] = useState(false);
+  const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
   // The language of the last search (what a kept subtitle is filed under on the server).
   const searchLang = useRef('en');
   const playback = useRef(0);
   const subtitleUrls = useRef(new Map<string, string>());
+  const download = useRef<{ controller: AbortController; source: 'menu' | 'shortcut' } | null>(null);
 
   useEffect(() => {
     const urls = subtitleUrls.current;
     return () => {
       playback.current++;
+      download.current?.controller.abort();
+      download.current = null;
+      setBestSubtitleLoading(false);
+      setPendingTrackId(null);
       urls.forEach(url => URL.revokeObjectURL(url));
       urls.clear();
     };
@@ -106,11 +121,22 @@ export function useSubtitles(
 
   // A language code (older callers), or what the viewer typed in the search form: anything
   // left out is taken from the title playing.
-  const searchOnlineSubtitles = useCallback(async (query?: string | SubtitleQuery): Promise<any[]> => {
+  const searchOnlineSubtitles = useCallback(async (
+    query?: string | SubtitleQuery,
+    opts?: { useCaptionToast?: boolean; signal?: AbortSignal }
+  ): Promise<any[]> => {
+    const notify = (type: 'info' | 'error', text: string) => {
+      if (opts?.signal?.aborted) return;
+      if (opts?.useCaptionToast) showCaptionToast(type, text, 2500);
+      else toast[type](text);
+    };
     const q: SubtitleQuery = typeof query === 'string' ? { language: query } : (query ?? {});
     const seriesName = seriesItem?.name || seriesItem?.title || '';
     const title = (q.title ?? '').trim() || (item?.is_episode ? (seriesName || item?.title || item?.name || '') : (item?.title || item?.name || ''));
-    if (!title) return [];
+    if (!title) {
+      if (opts?.useCaptionToast) notify('info', 'No subtitles found.');
+      return [];
+    }
     const year = q.year ?? (item?.year ? String(item.year) : '');
     const season = q.season ?? (item?.is_episode && item?.series_number !== undefined ? String(item.series_number) : '');
     const episode = q.episode ?? (item?.is_episode && item?.episode_num !== undefined ? String(item.episode_num) : '');
@@ -129,12 +155,13 @@ export function useSubtitles(
       if (playingToken) params.set('t', playingToken);
 
       const data = await apiSearchOnlineSubtitles(params);
+      if (opts?.signal?.aborted) return [];
       setOnlineSubtitleResults(data?.results || []);
-      if (!data?.results?.length) toast.info('No subtitles found.');
+      if (!data?.results?.length) notify('info', 'No subtitles found.');
       return data?.results || [];
     } catch (err) {
       console.error('Subtitle search failed:', err);
-      toast.error('Subtitle search failed.');
+      notify('error', 'Subtitle search failed.');
       return [];
     } finally {
       setSubtitleSearchLoading(false);
@@ -195,13 +222,69 @@ export function useSubtitles(
     }
   }, []);
 
+  const cancelOnlineSubtitle = useCallback((onlySource?: 'menu' | 'shortcut') => {
+    const active = download.current;
+    if (!active) return false;
+    if (onlySource && active.source !== onlySource) return false;
+    active.controller.abort();
+    download.current = null;
+    setBestSubtitleLoading(false);
+    return true;
+  }, []);
+
+  const pickOnlineSubtitle = useCallback(async (
+    picked?: OnlineSubtitleResult,
+    options?: PickOnlineSubtitleOptions
+  ): Promise<string | null> => {
+    download.current?.controller.abort();
+    const request = new AbortController();
+    const source = options?.source ?? 'menu';
+    download.current = { controller: request, source };
+    setBestSubtitleLoading(!picked);
+    if (!picked && source === 'shortcut') {
+      showCaptionToast('info', 'Finding subtitles…', 10000);
+    }
+    try {
+      const query = options?.query ?? { language: preferredSubtitleLanguage() };
+      const candidates = picked
+        ? [picked]
+        : (await searchOnlineSubtitles(query, { useCaptionToast: source === 'shortcut', signal: request.signal })).slice(0, 5);
+      for (const candidate of candidates) {
+        if (request.signal.aborted) return null;
+        const vtt = await downloadSubtitle(candidate, request.signal);
+        if (request.signal.aborted) return null;
+        if (vtt) {
+          const trackId = addOnlineSubtitle(candidate, vtt);
+          setPendingTrackId(trackId);
+          return trackId;
+        }
+      }
+      if (candidates.length && !request.signal.aborted) {
+        const message = picked ? subtitleFailureText(picked) : "Couldn't load a subtitle. Try one from the list.";
+        if (source === 'shortcut') showCaptionToast('error', message, 3000);
+        else toast.error(message);
+      }
+      return null;
+    } finally {
+      if (download.current?.controller === request) {
+        download.current = null;
+        setBestSubtitleLoading(false);
+      }
+    }
+  }, [searchOnlineSubtitles, addOnlineSubtitle]);
+
   return {
     subtitles,
     onlineSubtitleResults,
     subtitleSearchLoading,
+    bestSubtitleLoading,
+    pendingTrackId,
+    setPendingTrackId,
     searchOnlineSubtitles,
     addOnlineSubtitle,
     addLocalSubtitleFile,
     clearSubtitleSearch,
+    pickOnlineSubtitle,
+    cancelOnlineSubtitle,
   };
 }
