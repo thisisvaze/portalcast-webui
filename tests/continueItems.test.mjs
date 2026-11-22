@@ -4,6 +4,7 @@ import {
   continueCatalogIdOf,
   continueItemsOf,
   normalizeCatalogId,
+  pickVariantBackdrop,
 } from '../src/utils/continueItems.ts';
 
 test('normalizeCatalogId preserves prefixed ids and prefixes bare ids from search/category opens', () => {
@@ -116,4 +117,20 @@ test('continueItemsOf avoids treating an episode playbackFileId as a series cata
   assert.equal(items[0].catalogId, undefined);
   assert.equal(continueCatalogIdOf(items[0]), null);
   assert.equal(items[0].cw_detail, 'Season 1');
+});
+
+test('pickVariantBackdrop prefers HD backdrop across variants and skips excluded failed URLs', () => {
+  const variants = [
+    { backdrop_path: 'https://example.test/sd-1.jpg' },
+    {
+      backdrop_hd_path: 'https://example.test/hd-2.jpg',
+      backdrop_path: 'https://example.test/sd-2.jpg',
+    },
+  ];
+  assert.equal(pickVariantBackdrop(variants), 'https://example.test/hd-2.jpg');
+  assert.equal(
+    pickVariantBackdrop(variants, 'https://example.test/hd-2.jpg'),
+    'https://example.test/sd-1.jpg'
+  );
+  assert.equal(pickVariantBackdrop([{ backdrop_path: '' }, {}]), null);
 });

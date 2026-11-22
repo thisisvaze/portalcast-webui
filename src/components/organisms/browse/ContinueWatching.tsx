@@ -9,10 +9,14 @@ import MediaCardRow from '@/components/organisms/browse/MediaCardRow';
 import { useTitleMenu } from '@/context/TitleMenuContext';
 import { useLongPress } from '@/hooks/useLongPress';
 import { usePart } from '@/themes/registry';
-import Dialog from '@/components/ui/Dialog';
+import Dialog, { DialogFooter, DialogHeader } from '@/components/ui/Dialog';
 import Button from '@/components/ui/Button';
 import { Info, Loader2 } from 'lucide-react';
-import { continueImageUrl, useContinueDetails, type ContinueCardProps } from './continueCard';
+import {
+  continueImageUrl,
+  useContinueDetails,
+  type ContinueCardProps,
+} from './continueCard';
 
 interface ContinueWatchingProps {
   onClick: (item: MediaItem) => void;
@@ -27,7 +31,6 @@ interface ContinueWatchingProps {
   skipFirst?: boolean;
 }
 
-
 const imageUrlOf = continueImageUrl;
 
 /**
@@ -35,94 +38,129 @@ const imageUrlOf = continueImageUrl;
  * its bottom and "Episode · 23 min left" under it, the size of the other rows' posters. The
  * landscape art is the Home hero's (ContinueHero), above this row.
  */
-const ClassicContinueCard: React.FC<ContinueCardProps> = React.memo(({ item, onClick, onRemove, onRemoveNow, onDetails, opening }) => {
-  const anyItem = item as any;
-  // The title menu (hold / right-click), with Details and Remove from Continue Watching.
-  const openMenu = useTitleMenu();
-  const hold = useLongPress(openMenu ? () => openMenu(item, { onRemoveFromContinue: onRemoveNow, onDetails: onDetails ?? undefined }) : undefined);
-  const [failed, setFailed] = useState(false);
-  const poster = imageUrlOf(item.screenshot_uri);
-  const wide = imageUrlOf(anyItem.cw_backdrop);
-  const src = !failed && poster ? downsize(poster, 'w342') : wide ? downsize(wide, AMBIENT_BACKDROP) : null;
-  const title = anyItem.cw_show_title || item.title || item.name || '';
-  const pct = Math.min(100, Math.max(0, Number(item.progressPercent) || 0));
-  return (
-    <div
-      className="group relative cursor-pointer"
-      onClick={() => onClick(item)}
-      {...hold}
-      title={String(item.title || item.name || '')}
-      data-focusable="true"
-      tabIndex={-1}
-    >
-      <div className="relative aspect-2/3 w-full overflow-hidden rounded-md border border-white/10 bg-black/40 transition-all duration-300 group-hover:border-portalcast-light/50 group-hover:shadow-2xl group-hover:shadow-black/40 group-[.focused]:ring-2 group-[.focused]:ring-white sm:rounded-xl">
-        {src ? (
-          <img
-            src={src}
-            alt={title}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-            onError={() => setFailed(true)}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-white/10 to-transparent p-2 text-center text-sm font-bold text-white/60">
-            {title}
-          </div>
-        )}
-        {/* Always visible on a phone (no hover there); on hover elsewhere. */}
-        <button
-          className="absolute right-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white transition-opacity duration-200 hover:bg-red-600 focus:opacity-100 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
-          style={{ lineHeight: 1 }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          title="Remove from Continue Watching"
-          aria-label="Remove"
-          data-focusable="true"
-        >
-          ×
-        </button>
-        {onDetails && (
+const ClassicContinueCard: React.FC<ContinueCardProps> = React.memo(
+  ({ item, onClick, onRemove, onRemoveNow, onDetails, opening }) => {
+    const anyItem = item as any;
+    // The title menu (hold / right-click), with Details and Remove from Continue Watching.
+    const openMenu = useTitleMenu();
+    const hold = useLongPress(
+      openMenu
+        ? () =>
+            openMenu(item, {
+              onRemoveFromContinue: onRemoveNow,
+              onDetails: onDetails ?? undefined,
+            })
+        : undefined
+    );
+    const [failed, setFailed] = useState(false);
+    const poster = imageUrlOf(item.screenshot_uri);
+    const wide = imageUrlOf(anyItem.cw_backdrop);
+    const src =
+      !failed && poster
+        ? downsize(poster, 'w342')
+        : wide
+          ? downsize(wide, AMBIENT_BACKDROP)
+          : null;
+    const title = anyItem.cw_show_title || item.title || item.name || '';
+    const pct = Math.min(100, Math.max(0, Number(item.progressPercent) || 0));
+    return (
+      <div
+        className="group relative cursor-pointer"
+        onClick={() => onClick(item)}
+        {...hold}
+        title={String(item.title || item.name || '')}
+        data-focusable="true"
+        tabIndex={-1}
+      >
+        <div className="group-hover:border-portalcast-light/50 relative aspect-2/3 w-full overflow-hidden rounded-md border border-white/10 bg-black/40 transition-all duration-300 group-hover:shadow-2xl group-hover:shadow-black/40 group-[.focused]:ring-2 group-[.focused]:ring-white sm:rounded-xl">
+          {src ? (
+            <img
+              src={src}
+              alt={title}
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              onError={() => setFailed(true)}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-white/10 to-transparent p-2 text-center text-sm font-bold text-white/60">
+              {title}
+            </div>
+          )}
+          {/* Always visible on a phone (no hover there); on hover elsewhere. */}
           <button
-            className="absolute left-1 top-1 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white transition-opacity duration-200 hover:bg-white/25 focus:opacity-100 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+            className="absolute top-1 right-1 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white transition-opacity duration-200 hover:bg-red-600 focus:opacity-100 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+            style={{ lineHeight: 1 }}
             onClick={(e) => {
               e.stopPropagation();
-              onDetails();
+              onRemove();
             }}
-            title="Details"
-            aria-label="Details"
+            title="Remove from Continue Watching"
+            aria-label="Remove"
             data-focusable="true"
           >
-            {opening ? <Loader2 size={13} className="animate-spin" /> : <Info size={14} />}
+            ×
           </button>
-        )}
-        <div className="absolute bottom-0 left-0 h-1 w-full bg-white/20">
-          <div className="h-full bg-accent" style={{ width: `${pct}%` }} />
+          {onDetails && (
+            <button
+              className="absolute top-1 left-1 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white transition-opacity duration-200 hover:bg-white/25 focus:opacity-100 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDetails();
+              }}
+              title="Details"
+              aria-label="Details"
+              data-focusable="true"
+            >
+              {opening ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Info size={14} />
+              )}
+            </button>
+          )}
+          <div className="absolute bottom-0 left-0 h-1 w-full bg-white/20">
+            <div className="bg-accent h-full" style={{ width: `${pct}%` }} />
+          </div>
         </div>
+        <h3 className="group-hover:text-portalcast-light mt-2 hidden truncate text-sm font-semibold text-white sm:block md:text-base">
+          {title}
+        </h3>
+        {anyItem.cw_detail && (
+          <p className="text-fg-muted mt-1 truncate text-xs sm:mt-0 md:text-sm">
+            {anyItem.cw_detail}
+          </p>
+        )}
       </div>
-      <h3 className="mt-2 hidden truncate text-sm font-semibold text-white group-hover:text-portalcast-light sm:block md:text-base">{title}</h3>
-      {anyItem.cw_detail && <p className="mt-1 truncate text-xs text-fg-muted sm:mt-0 md:text-sm">{anyItem.cw_detail}</p>}
-    </div>
-  );
-});
+    );
+  }
+);
 
 /** The current theme's Continue Watching card (src/themes/registry.ts), else Classic's above. */
-const ContinueCard: React.FC<Omit<ContinueCardProps, 'onDetails' | 'opening'>> = (props) => {
+const ContinueCard: React.FC<
+  Omit<ContinueCardProps, 'onDetails' | 'opening'>
+> = (props) => {
   const Card = usePart('ContinueCard', ClassicContinueCard);
   const { openDetails, opening } = useContinueDetails(props.item);
   return <Card {...props} onDetails={openDetails} opening={opening} />;
 };
 
-const ContinueWatching: React.FC<ContinueWatchingProps> = ({ onClick, progressRecords, onProgressChanged, skipFirst = false }) => {
+const ContinueWatching: React.FC<ContinueWatchingProps> = ({
+  onClick,
+  progressRecords,
+  onProgressChanged,
+  skipFirst = false,
+}) => {
   const inProgressItems = useMemo<MediaItem[]>(
     () => continueItemsOf(progressRecords).slice(skipFirst ? 1 : 0),
     [progressRecords, skipFirst]
   );
 
   // Removing asks first (same as the TV app): the × opens a confirm, Cancel is the default.
-  const [confirming, setConfirming] = useState<{ id: string; title: string } | null>(null);
+  const [confirming, setConfirming] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
   const handleDismiss = useCallback(
     async (targetId: string) => {
@@ -166,24 +204,50 @@ const ContinueWatching: React.FC<ContinueWatchingProps> = ({ onClick, progressRe
           <ContinueCard
             item={item}
             onClick={onClick}
-            onRemove={() => setConfirming({ id: String(item.id), title: String(item.title || item.name || 'this title') })}
+            onRemove={() =>
+              setConfirming({
+                id: String(item.id),
+                title: String(item.title || item.name || 'this title'),
+              })
+            }
             onRemoveNow={() => void handleDismiss(String(item.id))}
           />
         )}
       />
-      <Dialog open={!!confirming} onClose={() => setConfirming(null)} focusGroup="cw-remove-confirm">
+      <Dialog
+        open={!!confirming}
+        onClose={() => setConfirming(null)}
+        labelledBy="cw-remove-title"
+        focusGroup="cw-remove-confirm"
+        className="max-w-md text-left"
+      >
         {confirming && (
           <>
-            <h3 className="line-clamp-2 text-lg font-bold text-fg">{confirming.title}</h3>
-            <p className="mt-2 text-sm text-fg-muted">Remove it from Continue Watching? Your place in it is forgotten.</p>
-            <div className="mt-5 flex gap-3">
-              <Button variant="accent" onClick={() => { const id = confirming.id; setConfirming(null); handleDismiss(id); }}>
-                Remove
-              </Button>
-              <Button variant="secondary" data-default-focus="true" autoFocus onClick={() => setConfirming(null)}>
+            <DialogHeader
+              id="cw-remove-title"
+              title={<span className="line-clamp-2">{confirming.title}</span>}
+              subtitle="Remove it from Continue Watching? Your place in it is forgotten."
+            />
+            <DialogFooter>
+              <Button
+                variant="secondary"
+                data-default-focus="true"
+                autoFocus
+                onClick={() => setConfirming(null)}
+              >
                 Cancel
               </Button>
-            </div>
+              <Button
+                variant="accent"
+                onClick={() => {
+                  const id = confirming.id;
+                  setConfirming(null);
+                  handleDismiss(id);
+                }}
+              >
+                Remove
+              </Button>
+            </DialogFooter>
           </>
         )}
       </Dialog>

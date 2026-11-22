@@ -25,8 +25,16 @@ export interface ProgressEntry {
 
 const BARE_ID = /^[\w.-]{1,120}$/;
 
-export function normalizeCatalogId(raw: unknown, isSeries: boolean): string | undefined {
-  const s = typeof raw === 'string' ? raw.trim() : typeof raw === 'number' ? String(raw) : '';
+export function normalizeCatalogId(
+  raw: unknown,
+  isSeries: boolean
+): string | undefined {
+  const s =
+    typeof raw === 'string'
+      ? raw.trim()
+      : typeof raw === 'number'
+        ? String(raw)
+        : '';
   if (!s) return undefined;
   if (isContentId(s)) return s;
   if (BARE_ID.test(s)) return `${isSeries ? 'series' : 'movie'}_${s}`;
@@ -36,11 +44,17 @@ export function normalizeCatalogId(raw: unknown, isSeries: boolean): string | un
 function titleGroupKey(title: unknown, isSeries: boolean): string | null {
   const raw = typeof title === 'string' ? title.trim() : '';
   if (!raw) return null;
-  const base = (isSeries ? baseShowName(raw) : raw).toLowerCase().replace(/\s+/g, ' ').trim();
+  const base = (isSeries ? baseShowName(raw) : raw)
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
   return base ? `${isSeries ? 'series' : 'movie'}:${base}` : null;
 }
 
-function cleanContinueEpisodeLabel(episodeTitle: string | undefined, showTitle: string | undefined): string | undefined {
+function cleanContinueEpisodeLabel(
+  episodeTitle: string | undefined,
+  showTitle: string | undefined
+): string | undefined {
   const raw = (episodeTitle || '').trim();
   if (!raw) return undefined;
   const show = (showTitle || '').trim();
@@ -65,11 +79,31 @@ function cleanContinueEpisodeLabel(episodeTitle: string | undefined, showTitle: 
   return cur || raw;
 }
 
+/** Picks the best landscape backdrop from a title's variants, preferring HD and skipping any failed URL. */
+export function pickVariantBackdrop(
+  variants: ReadonlyArray<{
+    backdrop_hd_path?: string;
+    backdrop_path?: string;
+  }>,
+  exclude?: string | null
+): string | null {
+  const excluded = exclude?.trim() || '';
+  for (const key of ['backdrop_hd_path', 'backdrop_path'] as const) {
+    for (const variant of variants) {
+      const raw = typeof variant[key] === 'string' ? variant[key].trim() : '';
+      if (raw && raw !== excluded) return raw;
+    }
+  }
+  return null;
+}
+
 /**
  * Resolves the catalogId ("series_123" / "movie_456") for a Continue Watching item when
  * directly known, normalizing bare ids and falling back to movie_<id> for movies.
  */
-export function continueCatalogIdOf(item: MediaItem | undefined): string | null {
+export function continueCatalogIdOf(
+  item: MediaItem | undefined
+): string | null {
   if (!item) return null;
   const anyItem = item as any;
   const isSeries =
@@ -88,7 +122,9 @@ export function continueCatalogIdOf(item: MediaItem | undefined): string | null 
  * Continue Watching cards from the viewer's progress records, newest first: unfinished,
  * not live TV, one card per title. Shared by the row and the Home hero.
  */
-export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] {
+export function continueItemsOf(
+  progressRecords: ProgressRecord[]
+): MediaItem[] {
   const items: MediaItem[] = [];
   const addedIds = new Set<string>();
   const addedShows = new Set<string>();
@@ -108,16 +144,22 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
     const isSeries = (entry.is_series ?? 0) === 1 || entry.type === 'series';
     const tKey = titleGroupKey(entry.title || entry.name, isSeries);
     const cat = normalizeCatalogId(entry.catalogId, isSeries);
-    const backdrop = typeof (record as any).backdrop_path === 'string' && (record as any).backdrop_path
-      ? String((record as any).backdrop_path)
-      : undefined;
+    const backdrop =
+      typeof (record as any).backdrop_path === 'string' &&
+      (record as any).backdrop_path
+        ? String((record as any).backdrop_path)
+        : undefined;
     if (cat && tKey && !catalogByTitle.has(tKey)) catalogByTitle.set(tKey, cat);
-    if (backdrop && cat && !backdropByCatalog.has(cat)) backdropByCatalog.set(cat, backdrop);
-    if (backdrop && tKey && !backdropByTitle.has(tKey)) backdropByTitle.set(tKey, backdrop);
+    if (backdrop && cat && !backdropByCatalog.has(cat))
+      backdropByCatalog.set(cat, backdrop);
+    if (backdrop && tKey && !backdropByTitle.has(tKey))
+      backdropByTitle.set(tKey, backdrop);
   }
 
   const sortedRecords = progressRecords
-    .filter((record) => !record.completed && record.meta && record.meta.type !== 'tv')
+    .filter(
+      (record) => !record.completed && record.meta && record.meta.type !== 'tv'
+    )
     .sort((a, b) => {
       const timeA = a.meta.timestamp || 0;
       const timeB = b.meta.timestamp || 0;
@@ -131,14 +173,16 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
   for (const record of sortedRecords) {
     try {
       const entry = record.meta as ProgressEntry;
-      const displayId = entry.id || entry.itemId || entry.mediaId || record.mediaId;
+      const displayId =
+        entry.id || entry.itemId || entry.mediaId || record.mediaId;
 
       if (!displayId || addedIds.has(displayId.toString())) continue;
       if (completedMediaIds.has(displayId.toString())) continue;
 
       const isSeries = (entry.is_series ?? 0) === 1 || entry.type === 'series';
       const tKey = titleGroupKey(entry.title || entry.name, isSeries);
-      const playbackFileId = (entry as any).playbackFileId || entry.itemId || entry.mediaId;
+      const playbackFileId =
+        (entry as any).playbackFileId || entry.itemId || entry.mediaId;
 
       // Resolve a valid prefixed catalogId: direct (normalized) -> inherited from a
       // sibling row of the same title -> distinct series mediaId (ignoring legacy
@@ -156,7 +200,10 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
           resolvedCatalogId = normalizeCatalogId(seriesMediaId, true);
         }
       } else if (!resolvedCatalogId && !isSeries) {
-        resolvedCatalogId = normalizeCatalogId(entry.mediaId || displayId, false);
+        resolvedCatalogId = normalizeCatalogId(
+          entry.mediaId || displayId,
+          false
+        );
       }
 
       // One card per show/title: multiple episodes of the same series collapse to the newest.
@@ -169,7 +216,9 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
 
       const backdrop =
         (record as any).backdrop_path ||
-        (resolvedCatalogId ? backdropByCatalog.get(resolvedCatalogId) : undefined) ||
+        (resolvedCatalogId
+          ? backdropByCatalog.get(resolvedCatalogId)
+          : undefined) ||
         (tKey ? backdropByTitle.get(tKey) : undefined) ||
         undefined;
 
@@ -179,7 +228,7 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
 
       items.push({
         id: displayId.toString(),
-        series_id: isSeries ? (seriesIdFromCatalog || entry.mediaId) : undefined,
+        series_id: isSeries ? seriesIdFromCatalog || entry.mediaId : undefined,
         season_id: isSeries ? (entry as any).seasonId || undefined : undefined,
 
         title: isSeries
@@ -189,7 +238,7 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
           ? `${entry.name || entry.title}${entry.episodeTitle ? ' – ' + entry.episodeTitle : ''}`
           : entry.name || entry.title,
         series_name: isSeries ? entry.title : undefined,
-        series_name_alt: isSeries ? (entry.name || entry.title) : undefined,
+        series_name_alt: isSeries ? entry.name || entry.title : undefined,
 
         screenshot_uri: entry.screenshot_uri,
 
@@ -209,12 +258,15 @@ export function continueItemsOf(progressRecords: ProgressRecord[]): MediaItem[] 
         cw_content_type: entry.type,
         cw_category_id: (entry as any).categoryId || null,
 
-        cw_episode_card_id: (entry as any).episodeCardId || entry.itemId || null,
+        cw_episode_card_id:
+          (entry as any).episodeCardId || entry.itemId || null,
 
         cw_backdrop: backdrop,
         cw_show_title: entry.title,
-        cw_detail: [episodeDetail, timeLeft(entry.duration - entry.currentTime)]
-          .filter(Boolean).join(' · ') || undefined,
+        cw_detail:
+          [episodeDetail, timeLeft(entry.duration - entry.currentTime)]
+            .filter(Boolean)
+            .join(' · ') || undefined,
       } as any);
       addedIds.add(displayId.toString());
       if (showKey) addedShows.add(showKey);

@@ -16,15 +16,20 @@ import { easeOut, smooth, snappy } from './motion';
  */
 const heroButton =
   'inline-flex w-fit items-center gap-2 rounded-xl px-7 py-3 text-base font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white [&.focused]:outline-2 [&.focused]:outline-offset-4 [&.focused]:outline-white';
-const MinimalHero: React.FC<ContinueHeroProps> = ({ progressRecords, onResume }) => {
+const MinimalHero: React.FC<ContinueHeroProps> = ({
+  progressRecords,
+  onResume,
+}) => {
   const hero = useContinueHero(progressRecords);
   const [loadedArt, setLoadedArt] = useState<string | null>(null);
   // Parallax: the art moves at 30 % of the scroll, so the page slides over it. A motion value
   // (a transform on the compositor), set from Home's own scroller, so no re-render per frame.
   const sectionRef = useRef<HTMLElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const artY = useMotionValue(0);
   const still = useReducedMotion();
   const shown = !!hero;
+  const src = hero?.art ? downsize(hero.art, 'w1280') : null;
   useEffect(() => {
     const scroller = sectionRef.current?.closest('#app-content-scroll');
     if (!scroller || still) return;
@@ -33,22 +38,43 @@ const MinimalHero: React.FC<ContinueHeroProps> = ({ progressRecords, onResume })
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
   }, [artY, still, shown]);
+  useEffect(() => {
+    if (src && imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      setLoadedArt(src);
+    }
+  }, [src]);
   if (!hero) return null;
-  const { item, details, title, art, onArtError, detail, pct, openDetails, detailsLoading } = hero;
-  const src = art ? downsize(art, 'w1280') : null;
+  const {
+    item,
+    details,
+    title,
+    onArtError,
+    detail,
+    pct,
+    openDetails,
+    detailsLoading,
+  } = hero;
 
   return (
-    <section ref={sectionRef} className="relative mb-10 overflow-hidden rounded-2xl bg-gray-900">
+    <section
+      ref={sectionRef}
+      className="relative mb-10 overflow-hidden rounded-2xl bg-gray-900"
+    >
       <div className="relative min-h-80 w-full sm:aspect-21/9 sm:min-h-0">
         {src && (
           <motion.img
+            ref={imgRef}
             key={src}
             src={src}
             alt=""
             onLoad={() => setLoadedArt(src)}
             onError={onArtError}
             initial={{ opacity: 0, scale: 1.04 }}
-            animate={loadedArt === src ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.04 }}
+            animate={
+              loadedArt === src
+                ? { opacity: 1, scale: 1 }
+                : { opacity: 0, scale: 1.04 }
+            }
             transition={{ duration: 0.9, ease: easeOut }}
             style={{ y: artY }}
             className="absolute inset-0 h-full w-full object-cover"
@@ -63,21 +89,40 @@ const MinimalHero: React.FC<ContinueHeroProps> = ({ progressRecords, onResume })
           transition={smooth}
           className="absolute inset-x-0 bottom-0 flex max-w-2xl flex-col items-start gap-3 p-6 text-left sm:p-10"
         >
-          <span className="text-sm font-semibold text-white/60">Continue Watching</span>
+          <span className="text-sm font-semibold text-white/60">
+            Continue Watching
+          </span>
           {details?.logo ? (
-            <img src={details.logo} alt={title} className="max-h-20 max-w-[min(100%,380px)] object-contain object-left sm:max-h-28" />
+            <img
+              src={details.logo}
+              alt={title}
+              className="max-h-20 max-w-[min(100%,380px)] object-contain object-left sm:max-h-28"
+            />
           ) : (
-            <h2 className="text-3xl leading-tight font-bold text-white sm:text-5xl">{title}</h2>
+            <h2 className="text-3xl leading-tight font-bold text-white sm:text-5xl">
+              {title}
+            </h2>
           )}
-          {details?.tagline && <p className="line-clamp-2 text-base text-white/70">{details.tagline}</p>}
+          {details?.tagline && (
+            <p className="line-clamp-2 text-base text-white/70">
+              {details.tagline}
+            </p>
+          )}
           <div className="flex items-center gap-3">
             <div className="h-1 w-32 overflow-hidden rounded-full bg-white/25 sm:w-48">
-              <div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} />
+              <div
+                className="h-full rounded-full bg-white"
+                style={{ width: `${pct}%` }}
+              />
             </div>
-            {detail && <span className="truncate text-sm text-white/70">{detail}</span>}
+            {detail && (
+              <span className="truncate text-sm text-white/70">{detail}</span>
+            )}
           </div>
           <div className="mt-1 flex items-center gap-3">
-            <PlaybackButton onClick={() => onResume(item)}>Resume</PlaybackButton>
+            <PlaybackButton onClick={() => onResume(item)}>
+              Resume
+            </PlaybackButton>
             {openDetails && (
               <motion.button
                 type="button"
@@ -88,7 +133,11 @@ const MinimalHero: React.FC<ContinueHeroProps> = ({ progressRecords, onResume })
                 data-focusable="true"
                 className={`${heroButton} minimal-glass-action text-white backdrop-blur-md`}
               >
-                {detailsLoading ? <ActivityIndicator className="text-lg" /> : <Info size={18} />}
+                {detailsLoading ? (
+                  <ActivityIndicator className="text-lg" />
+                ) : (
+                  <Info size={18} />
+                )}
                 Details
               </motion.button>
             )}

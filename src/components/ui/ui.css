@@ -77,11 +77,17 @@
     --ui-focus-ring: #3b82f6;
     --ui-focus-offset: 2px;
     --ui-focus-border: rgba(59, 130, 246, 0.8);
-    --ui-focus-glow: 0 10px 25px -5px rgba(59, 130, 246, 0.4), 0 8px 10px -6px rgba(59, 130, 246, 0.4);
+    --ui-focus-glow:
+      0 10px 25px -5px rgba(59, 130, 246, 0.4),
+      0 8px 10px -6px rgba(59, 130, 246, 0.4);
     --ui-focus-duration: 0.2s;
     --ui-focus-scale: 1.03;
     /* Selected: the picked entry of a list (.ui-selected: the channel on; a focused channel row). */
-    --ui-selected-bg: linear-gradient(90deg, var(--color-portalcast-light), var(--color-portalcast-dark));
+    --ui-selected-bg: linear-gradient(
+      90deg,
+      var(--color-portalcast-light),
+      var(--color-portalcast-dark)
+    );
     --ui-selected-fg: #fff;
     --ui-selected-shadow: 0 4px 12px rgba(0, 114, 255, 0.3);
     /* Scrollbars (.custom-scrollbar). idle: the thumb when the pointer is elsewhere. */
@@ -90,19 +96,40 @@
     --ui-scrollbar-thumb-idle: var(--ui-scrollbar-thumb);
     --ui-scrollbar-thumb-hover: rgba(255, 255, 255, 0.4);
     /* Accent: the main action of a screen or dialog (Button variant="accent", .ui-accent). */
-    --ui-accent-bg: linear-gradient(to right, var(--color-sky-400), var(--color-blue-500));
+    --ui-accent-bg: linear-gradient(
+      to right,
+      var(--color-sky-400),
+      var(--color-blue-500)
+    );
     --ui-accent-fg: #fff;
     /* Brand: the sign-in and landing pages' own fill (.ui-brand; text: .ui-brand-text). */
-    --ui-brand-bg: linear-gradient(to right, var(--color-indigo-500), var(--color-violet-600));
+    --ui-brand-bg: linear-gradient(
+      to right,
+      var(--color-indigo-500),
+      var(--color-violet-600)
+    );
     --ui-brand-fg: #fff;
-    --ui-brand-text: linear-gradient(to right, var(--color-indigo-400), var(--color-violet-400), var(--color-fuchsia-400));
+    --ui-brand-text: linear-gradient(
+      to right,
+      var(--color-indigo-400),
+      var(--color-violet-400),
+      var(--color-fuchsia-400)
+    );
     /* Dialogs (Dialog.tsx): the dimmed page, the panel, how it comes in. */
     --ui-dialog-scrim: rgba(0, 0, 0, 0.75);
     --ui-dialog-bg: rgba(16, 24, 40, 0.95);
     --ui-dialog-border: rgba(255, 255, 255, 0.1);
+    --ui-dialog-radius: 1rem;
+    --ui-dialog-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
     --ui-dialog-blur: none;
     --ui-dialog-ms: 200ms;
     --ui-dialog-ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --ui-dialog-close-bg: transparent;
+    --ui-dialog-close-hover: var(--color-interaction);
+    --ui-dialog-row-bg: transparent;
+    --ui-dialog-row-hover: var(--color-interaction);
+    --ui-dialog-row-radius: 0.75rem;
+    --ui-dialog-divider: rgba(255, 255, 255, 0.08);
     /* Notifications (Toaster.tsx): card, coloured left stripe per kind, progress bar, motion. */
     --ui-toast-bg: #0b0f19;
     --ui-toast-fg: var(--color-gray-300);
@@ -122,11 +149,22 @@
     --ui-glass-blur: none;
     --ui-glass-edge: inset 0 0 0 1px rgb(255 255 255 / 0.08);
     /* Side panels (Filters, the player's settings) and the scrim behind them. */
-    --ui-sheet-bg: linear-gradient(to bottom, #111a2d 0%, #0a1120 50%, #05080f 100%);
-    --ui-sheet-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08), -24px 0 48px rgba(0, 0, 0, 0.45);
+    --ui-sheet-bg: linear-gradient(
+      to bottom,
+      #111a2d 0%,
+      #0a1120 50%,
+      #05080f 100%
+    );
+    --ui-sheet-shadow:
+      inset 1px 0 0 rgba(255, 255, 255, 0.08), -24px 0 48px rgba(0, 0, 0, 0.45);
     --ui-sheet-blur: none;
     --ui-sheet-duration: 240ms;
-    --ui-scrim: linear-gradient(to right, rgba(5, 8, 15, 0) 0%, rgba(5, 8, 15, 0.35) 55%, rgba(5, 8, 15, 0.78) 100%);
+    --ui-scrim: linear-gradient(
+      to right,
+      rgba(5, 8, 15, 0) 0%,
+      rgba(5, 8, 15, 0.35) 55%,
+      rgba(5, 8, 15, 0.78) 100%
+    );
   }
 }
 
@@ -193,7 +231,9 @@
     pointer-events: none;
     opacity: 0;
     transform: translate(-50%, 0.25rem);
-    transition: opacity var(--ui-duration) var(--ui-ease), transform var(--ui-duration) var(--ui-ease);
+    transition:
+      opacity var(--ui-duration) var(--ui-ease),
+      transform var(--ui-duration) var(--ui-ease);
   }
   [data-tip]:hover::after,
   [data-tip]:focus-visible::after,
@@ -292,15 +332,26 @@
     font-size: var(--text-base);
     transition-property: scale, box-shadow;
   }
-  .ui-play-button:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: var(--ui-focus-offset); }
+  .ui-play-button:focus-visible {
+    outline: 2px solid var(--ui-focus-ring);
+    outline-offset: var(--ui-focus-offset);
+  }
   .ui-button.ui-play-button[data-icon-only] {
-    width: 2.75rem; height: 2.75rem; min-height: 0; padding: 0; border-radius: 50%;
+    width: 2.75rem;
+    height: 2.75rem;
+    min-height: 0;
+    padding: 0;
+    border-radius: 50%;
   }
   @media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
-    .ui-play-button:hover:not(:disabled) { scale: var(--ui-play-hover-scale); }
+    .ui-play-button:hover:not(:disabled) {
+      scale: var(--ui-play-hover-scale);
+    }
   }
   @media (prefers-reduced-motion: no-preference) {
-    .ui-play-button:active:not(:disabled) { scale: .96; }
+    .ui-play-button:active:not(:disabled) {
+      scale: 0.96;
+    }
   }
   .ui-button[data-variant='secondary'] {
     background-color: var(--ui-secondary-fill);
@@ -417,10 +468,18 @@
       background-color: color-mix(in oklab, var(--ui-chip-bg) 85%, transparent);
     }
     .ui-field-input {
-      background-color: color-mix(in oklab, var(--ui-field-bg) 85%, transparent);
+      background-color: color-mix(
+        in oklab,
+        var(--ui-field-bg) 85%,
+        transparent
+      );
     }
     .ui-row {
-      background-color: color-mix(in oklab, var(--color-panel-raised) 85%, transparent);
+      background-color: color-mix(
+        in oklab,
+        var(--color-panel-raised) 85%,
+        transparent
+      );
     }
   }
 }
@@ -431,12 +490,22 @@
    plain gradients, no flex gap, and :focus-visible in a rule of its own (an old browser drops a
    whole rule whose selector it cannot read). Look: the --ui-sheet-* and --ui-scrim tokens. */
 @keyframes pc-panel-in {
-  from { opacity: 0; transform: translate3d(48px, 0, 0); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translate3d(48px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @keyframes pc-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @layer components {
   /* What is behind darkens towards the panel, with no hard edge. */
@@ -469,26 +538,62 @@
     padding: 10px 12px;
     color: var(--color-fg);
     outline: none;
-    transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+    transition:
+      background-color 120ms ease,
+      color 120ms ease,
+      transform 120ms ease;
   }
-  .pc-row:hover { background-color: var(--color-interaction); }
-  .pc-row[data-selected='true'] { background-color: var(--color-interaction); }
-  .pc-muted { color: var(--color-fg-muted); }
-  .pc-set { color: var(--color-accent); }
+  .pc-row:hover {
+    background-color: var(--color-interaction);
+  }
+  .pc-row[data-selected='true'] {
+    background-color: var(--color-interaction);
+  }
+  .pc-muted {
+    color: var(--color-fg-muted);
+  }
+  .pc-set {
+    color: var(--color-accent);
+  }
   /* Focused (the remote's .focused, a keyboard's :focus-visible): the text colour as the fill,
      the page colour as the text, like Home's chips and the Play button (owner 2026-11-05: the
      accent fill washed out on a TV). */
-  .pc-row.focused { background-color: var(--color-fg); color: var(--color-page); transform: scale(1.02); }
-  .pc-row.focused .pc-muted, .pc-row.focused .pc-set { color: var(--color-page); opacity: 0.7; }
-  .pc-row:focus-visible { background-color: var(--color-fg); color: var(--color-page); transform: scale(1.02); }
-  .pc-row:focus-visible .pc-muted { color: var(--color-page); opacity: 0.7; }
-  .pc-row:focus-visible .pc-set { color: var(--color-page); opacity: 0.7; }
+  .pc-row.focused {
+    background-color: var(--color-fg);
+    color: var(--color-page);
+    transform: scale(1.02);
+  }
+  .pc-row.focused .pc-muted,
+  .pc-row.focused .pc-set {
+    color: var(--color-page);
+    opacity: 0.7;
+  }
+  .pc-row:focus-visible {
+    background-color: var(--color-fg);
+    color: var(--color-page);
+    transform: scale(1.02);
+  }
+  .pc-row:focus-visible .pc-muted {
+    color: var(--color-page);
+    opacity: 0.7;
+  }
+  .pc-row:focus-visible .pc-set {
+    color: var(--color-page);
+    opacity: 0.7;
+  }
 }
 @media (min-width: 640px) {
-  .pc-panel { border-top-left-radius: 16px; border-bottom-left-radius: 16px; }
+  .pc-panel {
+    border-top-left-radius: 16px;
+    border-bottom-left-radius: 16px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pc-panel, .pc-shade, .pc-swap-in { animation: none; }
+  .pc-panel,
+  .pc-shade,
+  .pc-swap-in {
+    animation: none;
+  }
 }
 
 /* MinimalHeader layout, shared by Minimal and Console. The header stays above the tab's
@@ -499,29 +604,48 @@ html:is([data-theme='minimal'], [data-theme='console']) {
   --chrome-bottom: calc(4rem + env(safe-area-inset-bottom));
 }
 @media (min-width: 640px) {
-  html:is([data-theme='minimal'], [data-theme='console']) { --chrome-top: 4rem; }
+  html:is([data-theme='minimal'], [data-theme='console']) {
+    --chrome-top: 4rem;
+  }
 }
 @media (min-width: 880px) {
-  html:is([data-theme='minimal'], [data-theme='console']) { --chrome-bottom: 0px; }
+  html:is([data-theme='minimal'], [data-theme='console']) {
+    --chrome-bottom: 0px;
+  }
 }
-html:is([data-theme='minimal'], [data-theme='console']) div:has(> header.ui-glass) {
+html:is([data-theme='minimal'], [data-theme='console'])
+  div:has(> header.ui-glass) {
   padding-bottom: 0;
-  & > main { padding-top: var(--chrome-top); }
+  & > main {
+    padding-top: var(--chrome-top);
+  }
 }
-html:is([data-theme='minimal'], [data-theme='console']) :where(.app-bg main) :is(#app-content-scroll, .tv-page) {
+html:is([data-theme='minimal'], [data-theme='console'])
+  :where(.app-bg main)
+  :is(#app-content-scroll, .tv-page) {
   margin-top: calc(-1 * var(--chrome-top));
   height: calc(100% + var(--chrome-top));
-  &::before, &::after { content: ''; display: block; }
-  &::before { height: var(--chrome-top); }
-  &::after { height: var(--chrome-bottom); }
-  & > .sticky.top-0 { top: var(--chrome-top); }
+  &::before,
+  &::after {
+    content: '';
+    display: block;
+  }
+  &::before {
+    height: var(--chrome-top);
+  }
+  &::after {
+    height: var(--chrome-bottom);
+  }
+  & > .sticky.top-0 {
+    top: var(--chrome-top);
+  }
 }
 
 /* A small target over the middle of the artwork leaves the rest of the edge poster clickable. */
 html:is([data-theme='minimal'], [data-theme='console']) .row-step {
   inset-block: 1.5rem 0;
   margin-block: auto;
-  margin-inline: .25rem;
+  margin-inline: 0.25rem;
   width: 2.75rem;
   height: 2.75rem;
   border-radius: 50%;
@@ -529,7 +653,10 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step {
   background-image: none;
   opacity: 1;
 }
-html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width: 1.25rem; height: 1.25rem; }
+html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
 
 /* Glass: a few large surfaces only (bars, menus, side panels), never per card: each blurred
    element is its own pass over what is behind it, so a grid of them is what gets slow. */
@@ -542,15 +669,19 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width:
   }
 }
 /* No blur available, or Reduce Transparency on: solid panels. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
   .ui-glass,
-  .pc-panel {
+  .pc-panel,
+  .ui-dialog {
     background: var(--color-panel);
   }
 }
 @media (prefers-reduced-transparency: reduce) {
   .ui-glass,
-  .pc-panel {
+  .pc-panel,
+  .ui-dialog {
     background: var(--color-panel);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -673,13 +804,22 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width:
   }
 }
 
-/* Dialog (Dialog.tsx): over everything, the page dimmed, the panel scaling in. */
+/* Dialog (Dialog.tsx): over everything, the page dimmed, the panel scaling in.
+   The scrim is a sibling of .ui-dialog inside .ui-dialog-layer (no opacity animation on an
+   ancestor), so Chromium never turns the backdrop into a Backdrop Root that kills the dialog's
+   backdrop-filter blur. */
 @keyframes ui-dialog-in {
-  from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.96); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @layer components {
-  .ui-dialog-backdrop {
+  .ui-dialog-layer {
     position: fixed;
     inset: 0;
     z-index: 100;
@@ -687,25 +827,112 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width:
     align-items: center;
     justify-content: center;
     padding: 1rem;
+  }
+  .ui-dialog-backdrop {
+    position: fixed;
+    inset: 0;
     background: var(--ui-dialog-scrim);
-    animation: pc-fade-in var(--ui-dialog-ms) var(--ui-ease) both;
+    animation: pc-fade-in var(--ui-dialog-ms) var(--ui-ease) backwards;
   }
   .ui-dialog {
+    position: relative;
+    z-index: 1;
     width: 100%;
     max-height: calc(100vh - 2rem);
     overflow-y: auto;
     padding: 1.5rem;
     border: 1px solid var(--ui-dialog-border);
-    border-radius: 1rem;
+    border-radius: var(--ui-dialog-radius);
     background: var(--ui-dialog-bg);
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--ui-dialog-shadow);
     -webkit-backdrop-filter: var(--ui-dialog-blur);
     backdrop-filter: var(--ui-dialog-blur);
-    animation: ui-dialog-in var(--ui-dialog-ms) var(--ui-dialog-ease) both;
+    animation: ui-dialog-in var(--ui-dialog-ms) var(--ui-dialog-ease) backwards;
+  }
+  .ui-dialog-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .ui-dialog-title {
+    color: var(--color-fg);
+    font-size: var(--text-lg);
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+  .ui-dialog-subtitle {
+    margin-top: 0.25rem;
+    color: var(--color-fg-muted);
+    font-size: var(--text-sm);
+    line-height: 1.4;
+  }
+  .ui-dialog-close {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    background-color: var(--ui-dialog-close-bg);
+    color: var(--color-fg-soft);
+    transition:
+      background-color var(--ui-duration) var(--ui-ease),
+      color var(--ui-duration) var(--ui-ease);
+  }
+  .ui-dialog-close:hover,
+  .ui-dialog-close:focus-visible,
+  .ui-dialog-close.focused {
+    background-color: var(--ui-dialog-close-hover);
+    color: var(--color-fg);
+    outline: none;
+  }
+  .ui-dialog-row {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.875rem;
+    border-radius: var(--ui-dialog-row-radius);
+    background-color: var(--ui-dialog-row-bg);
+    padding: 0.75rem 0.875rem;
+    text-align: left;
+    transition:
+      background-color var(--ui-duration) var(--ui-ease),
+      transform var(--ui-duration) var(--ui-ease);
+  }
+  .ui-dialog-row:hover:not(:disabled),
+  .ui-dialog-row:focus-visible:not(:disabled),
+  .ui-dialog-row.focused:not(:disabled) {
+    background-color: var(--ui-dialog-row-hover);
+    outline: none;
+  }
+  .ui-dialog-row:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .ui-dialog-row-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-fg-soft);
+  }
+  .ui-dialog-footer {
+    margin-top: 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.625rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ui-dialog-backdrop, .ui-dialog { animation: none; }
+  .ui-dialog-backdrop,
+  .ui-dialog {
+    animation: none;
+  }
 }
 
 /* Notifications (Toaster.tsx, react-toastify underneath): the card from --ui-toast-* tokens.
@@ -730,7 +957,8 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width:
     overflow: hidden;
     cursor: pointer;
     border: 1px solid var(--ui-toast-border);
-    border-left: var(--ui-toast-stripe) solid var(--ui-toast-stripe-color, var(--ui-toast-accent));
+    border-left: var(--ui-toast-stripe) solid
+      var(--ui-toast-stripe-color, var(--ui-toast-accent));
     border-radius: var(--ui-toast-radius);
     background: var(--ui-toast-bg);
     color: var(--ui-toast-fg);
@@ -739,8 +967,12 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width:
     -webkit-backdrop-filter: var(--ui-toast-blur);
     backdrop-filter: var(--ui-toast-blur);
   }
-  .ui-toast--success { --ui-toast-accent: var(--ui-toast-success); }
-  .ui-toast--error { --ui-toast-accent: var(--ui-toast-error); }
+  .ui-toast--success {
+    --ui-toast-accent: var(--ui-toast-success);
+  }
+  .ui-toast--error {
+    --ui-toast-accent: var(--ui-toast-error);
+  }
   .ui-toast-body {
     display: flex;
     flex: 1 1 auto;
@@ -752,15 +984,28 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width:
     font-size: var(--text-sm);
     font-weight: 500;
   }
-  .ui-toast-body > div:last-child { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+  .ui-toast-body > div:last-child {
+    min-width: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+  }
   /* Hide the bar with opacity rather than display:none: react-toastify auto-closes on its animationend. */
   .ui-toast .Toastify__progress-bar--wrp {
     opacity: var(--ui-toast-progress-opacity);
     pointer-events: none;
   }
-  .ui-toast .Toastify__progress-bar--info { background: var(--ui-toast-progress); }
-  .ui-toast .Toastify__close-button { margin: 10px 5px 0 0; color: var(--color-fg-subtle); opacity: 0.8; }
-  .ui-toast .Toastify__close-button:hover { color: var(--color-fg); opacity: 1; }
+  .ui-toast .Toastify__progress-bar--info {
+    background: var(--ui-toast-progress);
+  }
+  .ui-toast .Toastify__close-button {
+    margin: 10px 5px 0 0;
+    color: var(--color-fg-subtle);
+    opacity: 0.8;
+  }
+  .ui-toast .Toastify__close-button:hover {
+    color: var(--color-fg);
+    opacity: 1;
+  }
 }
 
 /* Activity indicator (ActivityIndicator.tsx): 1em square, spokes from the centre out. The
@@ -789,13 +1034,23 @@ html:is([data-theme='minimal'], [data-theme='console']) .row-step > svg { width:
   }
 }
 @keyframes ui-activity-spoke {
-  from { opacity: 1; }
-  to { opacity: 0.22; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.22;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ui-activity > span { animation: none; }
-  .ui-activity > span:nth-child(n+5) { opacity: .35; }
+  .ui-activity > span {
+    animation: none;
+  }
+  .ui-activity > span:nth-child(n + 5) {
+    opacity: 0.35;
+  }
 }
 @keyframes ui-wait-in {
-  from { opacity: 0; }
+  from {
+    opacity: 0;
+  }
 }

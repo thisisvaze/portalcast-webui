@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import Dialog from '@/components/ui/Dialog';
+import Dialog, { DialogFooter, DialogHeader } from '@/components/ui/Dialog';
 import Button from '@/components/ui/Button';
 
 type ConfirmationModalProps = {
@@ -55,34 +55,39 @@ const ConfirmationModal: React.FC<
   };
 
   return (
-    <Dialog open={isOpen} onClose={onCancel} labelledBy="modal-title">
-      <div onKeyDown={handleKeyDown}>
-        <h3 id="modal-title" className="mb-2 text-xl font-bold text-fg">
-          {title}
-        </h3>
-        <p className="mb-6 text-fg-soft">{message}</p>
+    <Dialog
+      open={isOpen}
+      onClose={onCancel}
+      labelledBy="modal-title"
+      onKeyDown={handleKeyDown}
+      className="max-w-md text-left"
+    >
+      <DialogHeader id="modal-title" title={title} subtitle={message} />
 
-        {showInput && (
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => onInputChange?.(e.target.value)}
-            placeholder={inputPlaceholder}
-            data-focusable="true"
-            autoFocus
-            className="ui-field-input mb-6 rounded-lg px-3 py-2"
-          />
-        )}
+      {showInput && (
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(e) => onInputChange?.(e.target.value)}
+          placeholder={inputPlaceholder}
+          data-focusable="true"
+          autoFocus
+          className="ui-field-input mt-4 rounded-lg px-3 py-2"
+        />
+      )}
 
-        <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onCancel}>
-            {cancelLabel}
-          </Button>
-          <Button ref={confirmButtonRef} variant={isDestructive ? 'danger' : 'accent'} onClick={onConfirm}>
-            {confirmLabel}
-          </Button>
-        </div>
-      </div>
+      <DialogFooter>
+        <Button variant="secondary" onClick={onCancel}>
+          {cancelLabel}
+        </Button>
+        <Button
+          ref={confirmButtonRef}
+          variant={isDestructive ? 'danger' : 'accent'}
+          onClick={onConfirm}
+        >
+          {confirmLabel}
+        </Button>
+      </DialogFooter>
     </Dialog>
   );
 };

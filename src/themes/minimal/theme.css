@@ -26,15 +26,23 @@
     --color-action: var(--color-accent);
     --color-action-hover: var(--color-fg-soft);
     --color-on-action: var(--color-on-accent);
-    --color-interaction: rgb(255 255 255 / .1);
+    --color-interaction: rgb(255 255 255 / 0.1);
     --color-divider: #48484a;
     --color-focus: #fff;
     --color-live: #ff453a;
     --ui-channel-monogram: var(--color-gray-700);
-    --ui-channel-tile: linear-gradient(160deg, var(--color-panel-hover), var(--color-panel));
-    --ui-channel-hero: linear-gradient(160deg, var(--color-gray-750), var(--color-gray-950));
+    --ui-channel-tile: linear-gradient(
+      160deg,
+      var(--color-panel-hover),
+      var(--color-panel)
+    );
+    --ui-channel-hero: linear-gradient(
+      160deg,
+      var(--color-gray-750),
+      var(--color-gray-950)
+    );
     accent-color: var(--color-accent);
-    -webkit-tap-highlight-color: rgba(255, 255, 255, .15);
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.15);
 
     /* Scale the tint on translucent surfaces together; content and blur keep their own values. */
     --ui-glass-opacity-scale: 0.88;
@@ -53,15 +61,23 @@
     --ui-pick-on-bg: #f5f5f7;
     --ui-pick-on-fg: #000;
     /* The player: glass over the picture, white progress, no red or green. */
-    --ui-player-panel-bg: rgb(22 22 24 / calc(0.62 * var(--ui-glass-opacity-scale)));
+    --ui-player-panel-bg: rgb(
+      22 22 24 / calc(0.62 * var(--ui-glass-opacity-scale))
+    );
     --ui-player-panel-border: rgb(255 255 255 / 0.08);
     --ui-player-panel-blur: blur(30px) saturate(1.6);
-    --ui-player-now-bg: rgb(255 255 255 / calc(0.1 * var(--ui-glass-opacity-scale)));
+    --ui-player-now-bg: rgb(
+      255 255 255 / calc(0.1 * var(--ui-glass-opacity-scale))
+    );
     --ui-player-now-fg: #f5f5f7;
     --ui-player-track: rgb(255 255 255 / 0.2);
     --ui-player-progress: #f5f5f7;
-    --ui-player-button-bg: rgb(30 30 32 / calc(0.55 * var(--ui-glass-opacity-scale)));
-    --ui-player-button-hover-bg: rgb(60 60 64 / calc(0.7 * var(--ui-glass-opacity-scale)));
+    --ui-player-button-bg: rgb(
+      30 30 32 / calc(0.55 * var(--ui-glass-opacity-scale))
+    );
+    --ui-player-button-hover-bg: rgb(
+      60 60 64 / calc(0.7 * var(--ui-glass-opacity-scale))
+    );
     --ui-player-button-border: transparent;
     --ui-backdrop-parallax: 0.35;
     --ui-tip-bg: rgb(30 30 32 / calc(0.8 * var(--ui-glass-opacity-scale)));
@@ -85,9 +101,85 @@
        close 0.35 s with no bounce. The page is in within the first third; the size keeps
        easing in, so the poster seems to grow into the page. */
     --ui-title-open-ms: 700;
-    --ui-title-open-ease: linear(0, 0.026, 0.0905, 0.1773, 0.2746, 0.3741, 0.4702, 0.5594, 0.6397, 0.7102, 0.7708, 0.822, 0.8644, 0.899, 0.9268, 0.9486, 0.9656, 0.9784, 0.988, 0.9948, 0.9996, 1.0028, 1.0048, 1.0058, 1.0063, 1.0062, 1.0059, 1.0054, 1.0048, 1.0042, 1.0036, 1.003, 1.0025, 1.002, 1.0016, 1.0012, 1);
+    --ui-title-open-ease: linear(
+      0,
+      0.026,
+      0.0905,
+      0.1773,
+      0.2746,
+      0.3741,
+      0.4702,
+      0.5594,
+      0.6397,
+      0.7102,
+      0.7708,
+      0.822,
+      0.8644,
+      0.899,
+      0.9268,
+      0.9486,
+      0.9656,
+      0.9784,
+      0.988,
+      0.9948,
+      0.9996,
+      1.0028,
+      1.0048,
+      1.0058,
+      1.0063,
+      1.0062,
+      1.0059,
+      1.0054,
+      1.0048,
+      1.0042,
+      1.0036,
+      1.003,
+      1.0025,
+      1.002,
+      1.0016,
+      1.0012,
+      1
+    );
     --ui-title-close-ms: 520;
-    --ui-title-close-ease: linear(0, 0.0283, 0.0959, 0.1833, 0.2779, 0.3719, 0.4607, 0.5417, 0.6138, 0.6769, 0.7313, 0.7777, 0.8169, 0.8498, 0.8773, 0.9, 0.9187, 0.9341, 0.9468, 0.957, 0.9654, 0.9722, 0.9777, 0.9821, 0.9857, 0.9886, 0.9909, 0.9927, 0.9942, 0.9954, 0.9963, 0.9971, 0.9977, 0.9982, 0.9985, 0.9988, 1);
+    --ui-title-close-ease: linear(
+      0,
+      0.0283,
+      0.0959,
+      0.1833,
+      0.2779,
+      0.3719,
+      0.4607,
+      0.5417,
+      0.6138,
+      0.6769,
+      0.7313,
+      0.7777,
+      0.8169,
+      0.8498,
+      0.8773,
+      0.9,
+      0.9187,
+      0.9341,
+      0.9468,
+      0.957,
+      0.9654,
+      0.9722,
+      0.9777,
+      0.9821,
+      0.9857,
+      0.9886,
+      0.9909,
+      0.9927,
+      0.9942,
+      0.9954,
+      0.9963,
+      0.9971,
+      0.9977,
+      0.9982,
+      0.9985,
+      0.9988,
+      1
+    );
     --ui-title-fade: 0.45;
     /* Focus and selection: a white ring and a soft shadow, a light grey fill for the picked
        entry; no blue glow. */
@@ -117,13 +209,21 @@
     --ui-brand-bg: #f5f5f7;
     --ui-brand-fg: #000;
     --ui-brand-text: linear-gradient(to right, #fff, #fff);
-    /* Dialogs: the same glass as the bars, springing in. */
-    --ui-dialog-scrim: rgb(0 0 0 / calc(0.55 * var(--ui-glass-opacity-scale)));
-    --ui-dialog-bg: var(--ui-glass-bg);
-    --ui-dialog-border: rgba(255, 255, 255, 0.08);
-    --ui-dialog-blur: var(--ui-glass-blur);
-    --ui-dialog-ms: 500ms;
+    /* Dialogs: elevated Apple dark frosted material, springing in. */
+    --ui-dialog-scrim: rgb(0 0 0 / 0.48);
+    --ui-dialog-bg: rgb(32 32 36 / calc(0.76 * var(--ui-glass-opacity-scale)));
+    --ui-dialog-border: rgb(255 255 255 / 0.14);
+    --ui-dialog-radius: 1.375rem;
+    --ui-dialog-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.14), 0 32px 64px -16px rgb(0 0 0 / 0.72);
+    --ui-dialog-blur: blur(36px) saturate(1.8);
+    --ui-dialog-ms: 420ms;
     --ui-dialog-ease: var(--ui-title-open-ease);
+    --ui-dialog-close-bg: rgb(255 255 255 / 0.09);
+    --ui-dialog-close-hover: rgb(255 255 255 / 0.17);
+    --ui-dialog-row-hover: rgb(255 255 255 / 0.11);
+    --ui-dialog-row-radius: 0.875rem;
+    --ui-dialog-divider: rgb(255 255 255 / 0.08);
     /* Notifications: the bars' glass, no coloured stripe or timer bar; colour only on the icon. */
     --ui-toast-bg: var(--ui-glass-bg);
     --ui-toast-fg: #f5f5f7;
@@ -140,14 +240,22 @@
     --ui-toast-motion: slide;
     /* Side panels: the same glass, a little more opaque for reading, over a dimmed page. */
     --ui-sheet-bg: rgb(28 28 30 / calc(0.78 * var(--ui-glass-opacity-scale)));
-    --ui-sheet-shadow: inset 1px 0 0 rgb(255 255 255 / 0.07), -24px 0 48px rgb(0 0 0 / 0.5);
+    --ui-sheet-shadow:
+      inset 1px 0 0 rgb(255 255 255 / 0.07), -24px 0 48px rgb(0 0 0 / 0.5);
     --ui-sheet-blur: var(--ui-glass-blur);
     --ui-sheet-duration: 350ms;
-    --ui-scrim: linear-gradient(to right, rgb(0 0 0 / calc(0.2 * var(--ui-glass-opacity-scale))) 0%, rgb(0 0 0 / calc(0.45 * var(--ui-glass-opacity-scale))) 55%, rgb(0 0 0 / calc(0.6 * var(--ui-glass-opacity-scale))) 100%);
+    --ui-scrim: linear-gradient(
+      to right,
+      rgb(0 0 0 / calc(0.2 * var(--ui-glass-opacity-scale))) 0%,
+      rgb(0 0 0 / calc(0.45 * var(--ui-glass-opacity-scale))) 55%,
+      rgb(0 0 0 / calc(0.6 * var(--ui-glass-opacity-scale))) 100%
+    );
 
     /* Type: SF Pro (the system font on Apple devices; the platform's own sans elsewhere,
        since SF Pro may not be served as a web font), Apple's text sizes, lighter bold. */
-    --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Inter, system-ui, sans-serif;
+    --font-sans:
+      -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+      'Helvetica Neue', Inter, system-ui, sans-serif;
     --text-3xs: 0.6875rem;
     --text-2xs: 0.75rem;
     --text-xs: 0.8125rem;
@@ -355,18 +463,30 @@ html[data-theme='minimal'] [data-ui='channel-picker'] {
   -webkit-backdrop-filter: var(--ui-player-panel-blur);
   backdrop-filter: var(--ui-player-panel-blur);
   border-color: var(--ui-player-panel-border);
-  box-shadow: var(--ui-glass-edge), 12px 0 32px rgb(0 0 0 / 0.22);
+  box-shadow:
+    var(--ui-glass-edge),
+    12px 0 32px rgb(0 0 0 / 0.22);
 }
-html[data-theme='minimal'] [data-ui='channel-picker'] > :is([data-part='categories'], [data-part='divider'], [data-part='channels']) {
+html[data-theme='minimal']
+  [data-ui='channel-picker']
+  > :is(
+    [data-part='categories'],
+    [data-part='divider'],
+    [data-part='channels']
+  ) {
   background: transparent;
   box-shadow: none;
 }
-html[data-theme='minimal'] [data-ui='channel-picker'] [data-part='mobile-heading'] {
+html[data-theme='minimal']
+  [data-ui='channel-picker']
+  [data-part='mobile-heading'] {
   background: var(--ui-glass-bg);
 }
 @media (prefers-reduced-transparency: reduce) {
   html[data-theme='minimal'] [data-ui='channel-picker'],
-  html[data-theme='minimal'] [data-ui='channel-picker'] [data-part='mobile-heading'] {
+  html[data-theme='minimal']
+    [data-ui='channel-picker']
+    [data-part='mobile-heading'] {
     background: var(--color-panel);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -386,6 +506,7 @@ html[data-theme='minimal'] *::after {
 html[data-theme='minimal'] .rounded-full,
 html[data-theme='minimal'] [class*=':rounded-full'],
 html[data-theme='minimal'] .ui-chip,
+html[data-theme='minimal'] .ui-dialog-close,
 html[data-theme='minimal'] .ui-play-button[data-icon-only],
 html[data-theme='minimal'] .ui-field-input {
   corner-shape: round;
@@ -414,10 +535,16 @@ html[data-theme='minimal'] [data-ui='title-action']:hover {
   background: rgb(255 255 255 / calc(0.2 * var(--ui-glass-opacity-scale)));
 }
 html[data-theme='minimal'] .minimal-glass-action {
-  background: rgb(255 255 255 / calc(var(--action-alpha, 0.15) * var(--ui-glass-opacity-scale)));
+  background: rgb(
+    255 255 255 /
+      calc(var(--action-alpha, 0.15) * var(--ui-glass-opacity-scale))
+  );
 }
 html[data-theme='minimal'] .minimal-glass-action:hover {
-  background: rgb(255 255 255 / calc(var(--action-hover-alpha, 0.25) * var(--ui-glass-opacity-scale)));
+  background: rgb(
+    255 255 255 /
+      calc(var(--action-hover-alpha, 0.25) * var(--ui-glass-opacity-scale))
+  );
 }
 html[data-theme='minimal'] [data-ui='title-meta'] {
   border-color: transparent;
@@ -567,7 +694,8 @@ html[data-theme='minimal'] .step-control {
   transition-property: background-color, scale;
   transition-duration: var(--ui-duration);
 }
-html[data-theme='minimal'] .step-control:is(:focus-visible, .focused, :active, :hover),
+html[data-theme='minimal']
+  .step-control:is(:focus-visible, .focused, :active, :hover),
 html[data-theme='minimal'] .seek-readout {
   background-color: var(--ui-glass-bg);
   box-shadow: var(--ui-glass-edge);
@@ -575,16 +703,30 @@ html[data-theme='minimal'] .seek-readout {
   backdrop-filter: var(--ui-glass-blur);
 }
 /* The ±10 s readout sits over the picture: the player's lighter glass (~55 %), so the blur shows. */
-html[data-theme='minimal'] .seek-readout { --ui-glass-bg: var(--ui-player-panel-bg); }
-html[data-theme='minimal'] .step-control:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+html[data-theme='minimal'] .seek-readout {
+  --ui-glass-bg: var(--ui-player-panel-bg);
+}
+html[data-theme='minimal'] .step-control:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
 @media (prefers-reduced-motion: no-preference) {
-  html[data-theme='minimal'] .step-control:active { scale: .95; }
+  html[data-theme='minimal'] .step-control:active {
+    scale: 0.95;
+  }
 }
 @media (prefers-reduced-transparency: reduce) {
-  html[data-theme='minimal'] :is(.step-control,.seek-readout) { --ui-glass-bg: var(--color-panel); --ui-glass-blur: none; }
+  html[data-theme='minimal'] :is(.step-control, .seek-readout) {
+    --ui-glass-bg: var(--color-panel);
+    --ui-glass-blur: none;
+  }
 }
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  html[data-theme='minimal'] :is(.step-control,.seek-readout) { --ui-glass-bg: var(--color-panel); }
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  html[data-theme='minimal'] :is(.step-control, .seek-readout) {
+    --ui-glass-bg: var(--color-panel);
+  }
 }
 html[data-theme='minimal'] .ui-player-panel {
   border-radius: 1.25rem;
@@ -635,12 +777,25 @@ html[data-theme='minimal'] .ui-player-float:not(.rounded-full) {
 /* No borders that light up white on hover (Apple TV marks a hover with a fill): the classes that
    light one with the focus or accent colour (white here) keep the hairline instead. Keyboard and
    remote focus keep theirs (focus:, .focused). */
-html[data-theme='minimal'] :is([class*='hover:border-focus'], [class*='hover:border-accent'], [class*='hover:border-portalcast'], [class*='hover:border-white'], [class*='hover:border-indigo']):hover,
-html[data-theme='minimal'] .group:hover :is([class*='group-hover:border-accent'], [class*='group-hover:border-portalcast']) {
+html[data-theme='minimal']
+  :is(
+    [class*='hover:border-focus'],
+    [class*='hover:border-accent'],
+    [class*='hover:border-portalcast'],
+    [class*='hover:border-white'],
+    [class*='hover:border-indigo']
+  ):hover,
+html[data-theme='minimal']
+  .group:hover
+  :is(
+    [class*='group-hover:border-accent'],
+    [class*='group-hover:border-portalcast']
+  ) {
   border-color: var(--color-line);
 }
 /* A field being typed in: the stronger hairline, not a white frame (the caret shows where). */
-html[data-theme='minimal'] :is([class*='focus:border-focus'], [class*='focus:border-indigo']):focus {
+html[data-theme='minimal']
+  :is([class*='focus:border-focus'], [class*='focus:border-indigo']):focus {
   border-color: var(--color-line-strong);
 }
 /* The landing page's tinted icon boxes and pill: the tint without its outline. */

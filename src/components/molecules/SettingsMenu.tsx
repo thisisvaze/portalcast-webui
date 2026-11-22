@@ -2,32 +2,87 @@ import React from 'react';
 import { useVideoContext } from '@/context/video';
 import { liveCaptionsSupported } from '@/utils/liveCaptions';
 import type { CaptionEngine } from '@/utils/liveCaptions/preference';
-import { formatDelay, getSubtitleDelay, setSubtitleDelay, subscribeSubtitleDelay } from '@/utils/subtitleDelay';
+import {
+  formatDelay,
+  getSubtitleDelay,
+  setSubtitleDelay,
+  subscribeSubtitleDelay,
+} from '@/utils/subtitleDelay';
 import { subtitleSizes } from '@/utils/subtitleSize';
-import { dialogueBoostLevels, getDialogueBoost, setDialogueBoost, subscribeDialogueBoost } from '@/utils/dialogueBoost';
+import {
+  dialogueBoostLevels,
+  getDialogueBoost,
+  setDialogueBoost,
+  subscribeDialogueBoost,
+} from '@/utils/dialogueBoost';
 import {
   useVideoQualityOptions,
   useAudioOptions,
   useCaptionOptions,
   GoogleCastButton,
 } from '@vidstack/react';
-import { ChevronRightIcon, CheckIcon, ChevronLeftIcon, X, ExternalLink } from 'lucide-react';
+import {
+  ChevronRightIcon,
+  CheckIcon,
+  ChevronLeftIcon,
+  X,
+  ExternalLink,
+} from 'lucide-react';
 import { FaChromecast } from 'react-icons/fa';
 import { toast } from 'react-toastify';
-import { absoluteStreamUrl, externalChoices, playlistFile, playlistName, type ExternalChoice } from '@/utils/externalPlayer';
+import {
+  absoluteStreamUrl,
+  externalChoices,
+  playlistFile,
+  playlistName,
+  type ExternalChoice,
+} from '@/utils/externalPlayer';
 import type { OnlineSubtitleResult } from '@/api/types/subtitles';
-import { getDiscoverVariants, type DiscoverVariant } from '@/api/endpoints/discover';
+import {
+  getDiscoverVariants,
+  type DiscoverVariant,
+} from '@/api/endpoints/discover';
 import { useOpenTitle } from '@/context/PersonPageContext';
 import { isContentId } from '@/utils/titleFormat';
 
 /** Languages offered in the subtitle search (ISO 639-1). */
 const SUBTITLE_LANGUAGES: [string, string][] = [
-  ['en', 'English'], ['hi', 'Hindi'], ['ta', 'Tamil'], ['te', 'Telugu'], ['ml', 'Malayalam'], ['kn', 'Kannada'],
-  ['bn', 'Bengali'], ['mr', 'Marathi'], ['gu', 'Gujarati'], ['pa', 'Punjabi'], ['ur', 'Urdu'], ['ar', 'Arabic'],
-  ['es', 'Spanish'], ['pt', 'Portuguese'], ['fr', 'French'], ['de', 'German'], ['it', 'Italian'], ['nl', 'Dutch'],
-  ['pl', 'Polish'], ['ru', 'Russian'], ['tr', 'Turkish'], ['el', 'Greek'], ['he', 'Hebrew'], ['fa', 'Persian'],
-  ['zh', 'Chinese'], ['ja', 'Japanese'], ['ko', 'Korean'], ['th', 'Thai'], ['vi', 'Vietnamese'], ['id', 'Indonesian'],
-  ['ms', 'Malay'], ['sv', 'Swedish'], ['no', 'Norwegian'], ['da', 'Danish'], ['fi', 'Finnish'], ['ro', 'Romanian'],
+  ['en', 'English'],
+  ['hi', 'Hindi'],
+  ['ta', 'Tamil'],
+  ['te', 'Telugu'],
+  ['ml', 'Malayalam'],
+  ['kn', 'Kannada'],
+  ['bn', 'Bengali'],
+  ['mr', 'Marathi'],
+  ['gu', 'Gujarati'],
+  ['pa', 'Punjabi'],
+  ['ur', 'Urdu'],
+  ['ar', 'Arabic'],
+  ['es', 'Spanish'],
+  ['pt', 'Portuguese'],
+  ['fr', 'French'],
+  ['de', 'German'],
+  ['it', 'Italian'],
+  ['nl', 'Dutch'],
+  ['pl', 'Polish'],
+  ['ru', 'Russian'],
+  ['tr', 'Turkish'],
+  ['el', 'Greek'],
+  ['he', 'Hebrew'],
+  ['fa', 'Persian'],
+  ['zh', 'Chinese'],
+  ['ja', 'Japanese'],
+  ['ko', 'Korean'],
+  ['th', 'Thai'],
+  ['vi', 'Vietnamese'],
+  ['id', 'Indonesian'],
+  ['ms', 'Malay'],
+  ['sv', 'Swedish'],
+  ['no', 'Norwegian'],
+  ['da', 'Danish'],
+  ['fi', 'Finnish'],
+  ['ro', 'Romanian'],
 ];
 
 export const SettingsMenu = React.memo(() => {
@@ -55,17 +110,29 @@ export const SettingsMenu = React.memo(() => {
     subtitleSize,
     setSubtitleSize,
     streamUrl,
+    contentType,
     item,
     seriesItem,
     channelInfo,
     playerRef,
   } = useVideoContext();
 
-  const title: string = String(item?.title || item?.name || channelInfo?.name || seriesItem?.name || 'PortalCast');
+  const isLiveTv = contentType === 'tv';
+
+  const title: string = String(
+    item?.title ||
+      item?.name ||
+      channelInfo?.name ||
+      seriesItem?.name ||
+      'PortalCast'
+  );
 
   // Version: the movie's other versions (Discover variants), to switch to from the same place.
   const openTitle = useOpenTitle();
-  const catalogId = item && !seriesItem && isContentId(String(item.catalogId ?? '')) ? String(item.catalogId) : null;
+  const catalogId =
+    item && !seriesItem && isContentId(String(item.catalogId ?? ''))
+      ? String(item.catalogId)
+      : null;
   const [versions, setVersions] = React.useState<DiscoverVariant[]>([]);
   React.useEffect(() => {
     let cancelled = false;
@@ -82,10 +149,13 @@ export const SettingsMenu = React.memo(() => {
   }, [catalogId, isSettingsMenuOpen]);
   const currentVersion = versions.find((v) => String(v.id) === catalogId);
   const switchVersion = (v: DiscoverVariant) => {
-    if (String(v.id) === catalogId || !openTitle) return setIsSettingsMenuOpen(false);
+    if (String(v.id) === catalogId || !openTitle)
+      return setIsSettingsMenuOpen(false);
     const at = Number(playerRef.current?.currentTime) || 0;
     setIsSettingsMenuOpen(false);
-    toast.info(`Switching to ${v.variantLabel || 'the other version'}…`, { autoClose: 2500 });
+    toast.info(`Switching to ${v.variantLabel || 'the other version'}…`, {
+      autoClose: 2500,
+    });
     void openTitle.playVersion(v, at);
   };
   const externalUrl = streamUrl ? absoluteStreamUrl(streamUrl) : null;
@@ -96,15 +166,23 @@ export const SettingsMenu = React.memo(() => {
     if (choice.action === 'copy') {
       try {
         await navigator.clipboard.writeText(externalUrl);
-        toast.success('Stream link copied. It works on this network until 6 hours after its last use.');
+        toast.success(
+          'Stream link copied. It works on this network until 6 hours after its last use.'
+        );
       } catch {
         window.prompt('Copy the stream link:', externalUrl);
       }
       return;
     }
-    try { playerRef.current?.pause?.(); } catch { /* not ready */ }
+    try {
+      playerRef.current?.pause?.();
+    } catch {
+      /* not ready */
+    }
     if (choice.action === 'playlist') {
-      const blob = new Blob([playlistFile(externalUrl, title)], { type: 'audio/x-mpegurl' });
+      const blob = new Blob([playlistFile(externalUrl, title)], {
+        type: 'audio/x-mpegurl',
+      });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = playlistName(title);
@@ -122,12 +200,22 @@ export const SettingsMenu = React.memo(() => {
 
   // The online subtitle search, prefilled from the title playing; the viewer can change any of it.
   const isEpisode = Boolean(item?.is_episode);
-  const defaultTitle = String((isEpisode ? seriesItem?.name || seriesItem?.title : item?.title || item?.name) || item?.name || '');
+  const defaultTitle = String(
+    (isEpisode
+      ? seriesItem?.name || seriesItem?.title
+      : item?.title || item?.name) ||
+      item?.name ||
+      ''
+  );
   const [subQuery, setSubQuery] = React.useState({
     title: defaultTitle,
     year: item?.year ? String(item.year) : '',
-    season: isEpisode && item?.series_number != null ? String(item.series_number) : '',
-    episode: isEpisode && item?.episode_num != null ? String(item.episode_num) : '',
+    season:
+      isEpisode && item?.series_number != null
+        ? String(item.series_number)
+        : '',
+    episode:
+      isEpisode && item?.episode_num != null ? String(item.episode_num) : '',
     language: (navigator.language || 'en').slice(0, 2).toLowerCase(),
   });
   React.useEffect(() => {
@@ -135,22 +223,46 @@ export const SettingsMenu = React.memo(() => {
       ...q,
       title: defaultTitle,
       year: item?.year ? String(item.year) : '',
-      season: isEpisode && item?.series_number != null ? String(item.series_number) : '',
-      episode: isEpisode && item?.episode_num != null ? String(item.episode_num) : '',
+      season:
+        isEpisode && item?.series_number != null
+          ? String(item.series_number)
+          : '',
+      episode:
+        isEpisode && item?.episode_num != null ? String(item.episode_num) : '',
     }));
-  }, [defaultTitle, isEpisode, item?.year, item?.series_number, item?.episode_num]);
-  const subField = 'w-full rounded-md border border-line-strong bg-page/70 px-2 py-1.5 text-sm text-fg outline-none focus:border-focus';
+  }, [
+    defaultTitle,
+    isEpisode,
+    item?.year,
+    item?.series_number,
+    item?.episode_num,
+  ]);
+  const subField =
+    'w-full rounded-md border border-line-strong bg-page/70 px-2 py-1.5 text-sm text-fg outline-none focus:border-focus';
 
   const qualities = useVideoQualityOptions({ auto: true, sort: 'ascending' });
   const audioOptions = useAudioOptions();
   const captionOptions = useCaptionOptions();
-  const subtitleDelay = React.useSyncExternalStore(subscribeSubtitleDelay, getSubtitleDelay);
-  const dialogueBoost = React.useSyncExternalStore(subscribeDialogueBoost, getDialogueBoost);
+  const subtitleDelay = React.useSyncExternalStore(
+    subscribeSubtitleDelay,
+    getSubtitleDelay
+  );
+  const dialogueBoost = React.useSyncExternalStore(
+    subscribeDialogueBoost,
+    getDialogueBoost
+  );
 
   React.useEffect(
-    () => () => { cancelOnlineSubtitle('menu'); },
+    () => () => {
+      cancelOnlineSubtitle('menu');
+    },
     [streamUrl, isSettingsMenuOpen, activeSettingsMenu, cancelOnlineSubtitle]
   );
+  React.useEffect(() => {
+    if (isLiveTv && activeSettingsMenu === 'add-subtitle') {
+      setActiveSettingsMenu('subtitles');
+    }
+  }, [isLiveTv, activeSettingsMenu, setActiveSettingsMenu]);
   const pickFromMenu = (picked?: OnlineSubtitleResult) =>
     pickOnlineSubtitle(picked, { query: subQuery, source: 'menu' });
 
@@ -165,7 +277,10 @@ export const SettingsMenu = React.memo(() => {
       ) {
         // Check if the clicked target is the settings button itself to prevent immediate re-opening
         const target = event.target as HTMLElement;
-        if (target.closest('[data-control="settings-menu"]') || target.closest('[title="Settings"]')) {
+        if (
+          target.closest('[data-control="settings-menu"]') ||
+          target.closest('[title="Settings"]')
+        ) {
           return;
         }
         setIsSettingsMenuOpen(false);
@@ -180,7 +295,15 @@ export const SettingsMenu = React.memo(() => {
 
   // Helper function to handle menu changes smoothly
   const handleMenuChange = (
-    menuName: 'main' | 'quality' | 'audio' | 'subtitles' | 'add-subtitle' | 'cast' | 'external' | 'version'
+    menuName:
+      | 'main'
+      | 'quality'
+      | 'audio'
+      | 'subtitles'
+      | 'add-subtitle'
+      | 'cast'
+      | 'external'
+      | 'version'
   ) => {
     setActiveSettingsMenu(menuName);
     setFocusedIndex(0);
@@ -188,525 +311,666 @@ export const SettingsMenu = React.memo(() => {
 
   if (!isSettingsMenuOpen) return null;
 
-  const menuTitle = {
-    main: 'Settings', quality: 'Quality', audio: 'Audio', subtitles: 'Subtitles',
-    'add-subtitle': 'Find subtitles', cast: 'Cast', external: 'Open in…', version: 'Version',
-  }[activeSettingsMenu] ?? 'Settings';
+  const menuTitle =
+    {
+      main: 'Settings',
+      quality: 'Quality',
+      audio: 'Audio',
+      subtitles: 'Subtitles',
+      'add-subtitle': 'Find subtitles',
+      cast: 'Cast',
+      external: 'Open in…',
+      version: 'Version',
+    }[activeSettingsMenu] ?? 'Settings';
 
   // The same full-height side panel as Filters and the TV app (pc-panel in index.css; owner
   // 2026-11-04: the small popover looked out of place). A press on the shade closes it.
   return (
     <>
-    <div className="pc-shade fixed inset-0 z-40" aria-hidden="true" />
-    <div
-      ref={settingsMenuRef}
-      className="pc-panel fixed bottom-0 right-0 top-0 z-50 flex w-full flex-col px-4 pb-4 pt-6 text-base text-fg sm:w-[420px]"
-    >
-      <div className="flex items-center gap-2 px-3 pb-3">
-        <span className="h-9 w-9 shrink-0" aria-hidden="true" />
-        <h2 className="min-w-0 flex-1 truncate text-center text-xl font-semibold text-white">{menuTitle}</h2>
-        <button
-          type="button"
-          data-focusable="true"
-          data-control="settings-close"
-          aria-label="Close"
-          onClick={() => setIsSettingsMenuOpen(false)}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-interaction"
+      <div className="pc-shade fixed inset-0 z-40" aria-hidden="true" />
+      <div
+        ref={settingsMenuRef}
+        className="pc-panel text-fg fixed top-0 right-0 bottom-0 z-50 flex w-full flex-col px-4 pt-6 pb-4 text-base sm:w-[420px]"
+      >
+        <div className="flex items-center gap-2 px-3 pb-3">
+          <span className="h-9 w-9 shrink-0" aria-hidden="true" />
+          <h2 className="min-w-0 flex-1 truncate text-center text-xl font-semibold text-white">
+            {menuTitle}
+          </h2>
+          <button
+            type="button"
+            data-focusable="true"
+            data-control="settings-close"
+            aria-label="Close"
+            onClick={() => setIsSettingsMenuOpen(false)}
+            className="hover:bg-interaction flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mx-3 mb-2 h-px shrink-0 bg-white/[0.06]" />
+        <div
+          key={activeSettingsMenu}
+          className="pc-swap-in custom-scrollbar flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
         >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="mx-3 mb-2 h-px shrink-0 bg-white/[0.06]" />
-      <div key={activeSettingsMenu} className="pc-swap-in custom-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
-      {/* MAIN MENU */}
-      {activeSettingsMenu === 'main' && (
-        <div className="flex flex-col space-y-1">
-          <button
-            data-focusable="true"
-            data-control="settings-item"
-            onClick={() => handleMenuChange('quality')} // 👈 Updated
-            className="pc-row flex items-center justify-between text-left"
-          >
-            <span>Quality</span>
-            <div className="pc-muted flex items-center">
-              <span className="mr-1 text-xs">
-                {qualities.selectedValue === 'auto'
-                  ? 'Auto'
-                  : `${qualities.selectedQuality?.height}p`}
-              </span>
-              <ChevronRightIcon className="h-4 w-4" />
-            </div>
-          </button>
-
-          {versions.length > 1 && (
-            <button
-              data-focusable="true"
-              data-control="settings-item"
-              onClick={() => handleMenuChange('version')}
-              className="pc-row flex items-center justify-between text-left"
-            >
-              <span>Version</span>
-              <div className="pc-muted flex min-w-0 items-center">
-                <span className="mr-1 truncate text-xs">{currentVersion?.variantLabel || `${versions.length} versions`}</span>
-                <ChevronRightIcon className="h-4 w-4 shrink-0" />
-              </div>
-            </button>
-          )}
-
-          {audioOptions.length > 0 && (
-            <button
-              data-focusable="true"
-              data-control="settings-item"
-              onClick={() => handleMenuChange('audio')} // 👈 Updated
-              className="pc-row flex items-center justify-between text-left"
-            >
-              <span>Audio</span>
-              <div className="pc-muted flex items-center">
-                <ChevronRightIcon className="h-4 w-4" />
-              </div>
-            </button>
-          )}
-
-          {typeof AudioContext !== 'undefined' && (
-            <div role="group" aria-label="Dialogue boost" className="px-3 py-2">
-              <div className="mb-1 text-sm">Dialogue boost</div>
-              <div className="flex gap-1">
-                {dialogueBoostLevels.map((level) => (
-                  <button key={level} type="button" data-focusable="true" data-control="settings-item"
-                    aria-pressed={level === dialogueBoost} data-selected={level === dialogueBoost}
-                    onClick={() => setDialogueBoost(level, playerRef.current?.el?.querySelector('video, audio'))}
-                    className="pc-row flex flex-1 items-center justify-center gap-1 text-sm capitalize">
-                    {level === dialogueBoost && <CheckIcon aria-hidden="true" className="h-4 w-4" />}
-                    {level}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <button
-            data-focusable="true"
-            data-control="settings-item"
-            onClick={() => handleMenuChange('subtitles')} // 👈 Updated
-            className="pc-row flex items-center justify-between text-left"
-          >
-            <span>Captions</span>
-            <div className="pc-muted flex items-center">
-              <span className="mr-1 max-w-44 truncate text-xs">
-                {captionOptions.selectedTrack?.label || 'Off'}
-              </span>
-              <ChevronRightIcon className="h-4 w-4" />
-            </div>
-          </button>
-
-          {externalUrl && (
-            <button
-              data-focusable="true"
-              data-control="settings-item"
-              onClick={() => handleMenuChange('external')}
-              className="pc-row flex items-center justify-between text-left"
-            >
-              <span>Open in…</span>
-              <div className="pc-muted flex items-center">
-                <ExternalLink className="mr-1 h-4 w-4" />
-                <ChevronRightIcon className="h-4 w-4" />
-              </div>
-            </button>
-          )}
-
-        </div>
-      )}
-
-      {/* VERSION: the movie's other versions */}
-      {activeSettingsMenu === 'version' && (
-        <div className="flex flex-col space-y-1">
-          <button
-            data-focusable="true"
-            data-control="settings-item"
-            onClick={() => handleMenuChange('main')}
-            className="pc-row mb-1 flex items-center"
-          >
-            <ChevronLeftIcon className="mr-2 h-4 w-4" />
-            <span>Back</span>
-          </button>
-          {versions.map((v) => (
-            <button
-              key={String(v.id)}
-              data-focusable="true"
-              data-control="settings-item"
-              onClick={() => switchVersion(v)}
-              className="pc-row flex items-center justify-between text-left"
-            >
-              <span className="truncate">{v.variantLabel || String(v.title || v.name || v.id)}</span>
-              {String(v.id) === catalogId && <CheckIcon className="h-4 w-4 shrink-0" />}
-            </button>
-          ))}
-          <p className="px-3 pt-1 text-2xs leading-snug text-fg-subtle">Plays from where you are now.</p>
-        </div>
-      )}
-
-      {/* OPEN IN ANOTHER PLAYER */}
-      {activeSettingsMenu === 'external' && externalUrl && (
-        <div className="flex flex-col space-y-1">
-          <button
-            data-focusable="true"
-            data-control="settings-item"
-            onClick={() => handleMenuChange('main')}
-            className="pc-row mb-1 flex items-center"
-          >
-            <ChevronLeftIcon className="mr-2 h-4 w-4" />
-            <span>Open in…</span>
-          </button>
-          {externalChoices(externalUrl, title).map((c) => (
-            <button
-              key={c.id}
-              data-focusable="true"
-              data-control="settings-item"
-              onClick={() => void openExternal(c)}
-              className="pc-row flex items-center text-left"
-            >
-              <span>{c.label}</span>
-            </button>
-          ))}
-          <p className="px-3 pt-1 text-2xs leading-snug text-fg-subtle">
-            The other player gets this stream only, never your provider's address. Progress there is not saved here.
-          </p>
-        </div>
-      )}
-
-      {/* QUALITY SUBMENU */}
-      {activeSettingsMenu === 'quality' && (
-        <div className="flex flex-col">
-          <button
-            data-focusable="true"
-            data-control="settings-back"
-            onClick={() => handleMenuChange('main')} // 👈 Back ponalum focus reset aagum
-            className="pc-row mb-1 flex items-center"
-          >
-            <ChevronLeftIcon className="mr-1 h-4 w-4" />
-            <span>Back</span>
-          </button>
-          {qualities.map(({ label, value, select }) => (
-            <button
-              key={value}
-              data-focusable="true"
-              data-control="settings-item"
-              onClick={() => {
-                select();
-                setIsSettingsMenuOpen(false);
-                setFocusedIndex(0);
-              }}
-              data-selected={qualities.selectedValue === value ? 'true' : 'false'}
-              className="pc-row flex items-center justify-between text-left"
-            >
-              <span>{label}</span>
-              {qualities.selectedValue === value && (
-                <CheckIcon className="h-4 w-4" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* AUDIO SUBMENU */}
-      {activeSettingsMenu === 'audio' && (
-        <div className="flex flex-col">
-          <button
-            data-focusable="true"
-            data-control="settings-back"
-            onClick={() => handleMenuChange('main')}
-            className="pc-row mb-1 flex items-center"
-          >
-            <ChevronLeftIcon className="mr-1 h-4 w-4" />
-            <span>Back</span>
-          </button>
-          {audioOptions.map(({ label, value, select }) => (
-            <button
-              key={value}
-              data-focusable="true"
-              data-control="settings-item"
-              onClick={() => {
-                select();
-                setIsSettingsMenuOpen(false);
-                setFocusedIndex(0);
-              }}
-              data-selected={audioOptions.selectedValue === value ? 'true' : 'false'}
-              className="pc-row flex items-center justify-between text-left"
-            >
-              <span>{label || 'Default'}</span>
-              {audioOptions.selectedValue === value && (
-                <CheckIcon className="h-4 w-4" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* CAPTIONS SUBMENU — already-available tracks, plus one clean way to add more */}
-      {activeSettingsMenu === 'subtitles' && (
-        <div className="flex flex-col">
-          <button
-            data-focusable="true"
-            data-control="settings-back"
-            onClick={() => handleMenuChange('main')} // 👈 Back
-            className="pc-row mb-1 flex items-center"
-          >
-            <ChevronLeftIcon className="mr-1 h-4 w-4" />
-            <span>Back</span>
-          </button>
-          {captionOptions.map(({ label, value, select, track, selected }) => (
-            <button
-              key={value}
-              data-focusable="true"
-              data-control="settings-item"
-              onClick={() => {
-                chooseCaption(track?.id);
-                if (!selected) select(); // Vidstack's "Off" action toggles when it is already off.
-                setIsSettingsMenuOpen(false);
-                setFocusedIndex(0);
-              }}
-              data-selected={captionOptions.selectedValue === value ? 'true' : 'false'}
-              className="pc-row flex items-center justify-between text-left"
-            >
-              <span>{label}</span>
-              {captionOptions.selectedValue === value && (
-                <CheckIcon className="h-4 w-4" />
-              )}
-            </button>
-          ))}
-
-          <div role="group" aria-label="Subtitle size" className="border-t border-line-strong px-3 py-2">
-            <div className="mb-1 text-sm">Subtitle size</div>
-            <div className="flex gap-1">
-              {subtitleSizes.map(size => (
-                <button key={size} type="button" data-focusable="true" data-control="settings-item"
-                  aria-pressed={size === subtitleSize} data-selected={size === subtitleSize}
-                  onClick={() => setSubtitleSize(size)}
-                  className="pc-row flex flex-1 items-center justify-center gap-1 text-sm capitalize">
-                  {size === subtitleSize && <CheckIcon aria-hidden="true" className="h-4 w-4" />}
-                  {size}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {liveCaptionsSupported() && (
-            <label className="flex flex-col gap-1 border-t border-line-strong px-3 py-2 text-sm">
-              Auto-caption model
-              <select
-                data-focusable="true"
-                data-control="settings-item"
-                className={subField}
-                value={captionEngine}
-                onChange={e => setCaptionEngine(e.target.value as CaptionEngine)}
-              >
-                <option value="nemotron">Nemotron (default)</option>
-                <option value="moonshine">Moonshine v2</option>
-              </select>
-            </label>
-          )}
-
-          {/* Per-title subtitle timing (utils/subtitleDelay.ts), saved on this device */}
-          <div className="mt-1 border-t border-line-strong px-3 pt-2 text-xs text-fg-soft">
-            Timing: {formatDelay(subtitleDelay)}
-          </div>
-          <div className="flex items-center gap-1 px-2 pb-1 pt-1">
-            {[
-              { label: '− 0.25 s', delta: -250 },
-              { label: '+ 0.25 s', delta: 250 },
-            ].map(({ label, delta }) => (
-              <button
-                key={label}
-                data-focusable="true"
-                data-control="settings-item"
-                onClick={() => setSubtitleDelay(subtitleDelay + delta)}
-                className="pc-row flex-1 text-center text-sm"
-              >
-                {label}
-              </button>
-            ))}
-            <button
-              data-focusable="true"
-              data-control="settings-item"
-              onClick={() => setSubtitleDelay(0)}
-              className="pc-row flex-1 text-center text-sm"
-            >
-              Reset
-            </button>
-          </div>
-
-          <button
-            data-focusable="true"
-            data-control="settings-item"
-            onClick={() => {
-              clearSubtitleSearch?.();
-              handleMenuChange('add-subtitle');
-            }}
-            className="pc-row mt-2 flex items-center justify-between text-left font-semibold"
-          >
-            <span>+ Add Subtitle</span>
-            <ChevronRightIcon className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* ADD SUBTITLE SUBMENU — exactly two choices, results replace them once you search */}
-      {activeSettingsMenu === 'add-subtitle' && (
-        <div className="flex flex-col">
-          <button
-            data-focusable="true"
-            data-control="settings-back"
-            onClick={() => {
-              clearSubtitleSearch?.();
-              handleMenuChange('subtitles');
-            }}
-            className="pc-row mb-1 flex items-center"
-          >
-            <ChevronLeftIcon className="mr-1 h-4 w-4" />
-            <span>Back</span>
-          </button>
-
-          <input
-            ref={localSubtitleInputRef}
-            type="file"
-            accept=".srt,.vtt"
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              e.target.value = '';
-              if (file) setPendingTrackId(await addLocalSubtitleFile(file) ?? null);
-            }}
-          />
-
-          {!onlineSubtitleResults?.length && (
-            <>
-              <form
-                className="mb-1 flex flex-col gap-1.5 px-1"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void searchOnlineSubtitles?.(subQuery);
-                }}
-              >
-                <input
-                  data-focusable="true"
-                  aria-label="Title to search"
-                  placeholder="Title"
-                  value={subQuery.title}
-                  onChange={(e) => setSubQuery({ ...subQuery, title: e.target.value })}
-                  className={subField}
-                />
-                <div className="flex gap-1.5">
-                  {isEpisode ? (
-                    <>
-                      <input data-focusable="true" aria-label="Season" placeholder="S" inputMode="numeric" value={subQuery.season}
-                        onChange={(e) => setSubQuery({ ...subQuery, season: e.target.value.replace(/\D/g, '').slice(0, 4) })} className={subField} />
-                      <input data-focusable="true" aria-label="Episode" placeholder="E" inputMode="numeric" value={subQuery.episode}
-                        onChange={(e) => setSubQuery({ ...subQuery, episode: e.target.value.replace(/\D/g, '').slice(0, 4) })} className={subField} />
-                    </>
-                  ) : (
-                    <input data-focusable="true" aria-label="Year" placeholder="Year" inputMode="numeric" value={subQuery.year}
-                      onChange={(e) => setSubQuery({ ...subQuery, year: e.target.value.replace(/\D/g, '').slice(0, 4) })} className={subField} />
-                  )}
-                  <select data-focusable="true" aria-label="Language" value={subQuery.language}
-                    onChange={(e) => setSubQuery({ ...subQuery, language: e.target.value })} className={subField}>
-                    {SUBTITLE_LANGUAGES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-                  </select>
-                </div>
-              </form>
+          {/* MAIN MENU */}
+          {activeSettingsMenu === 'main' && (
+            <div className="flex flex-col space-y-1">
               <button
                 data-focusable="true"
                 data-control="settings-item"
-                onClick={() => void pickFromMenu()}
-                disabled={subtitleSearchLoading || bestSubtitleLoading}
-                className="pc-row flex items-center justify-between text-left font-semibold disabled:opacity-50"
-              >
-                <span>{bestSubtitleLoading ? 'Finding the best match…' : 'Best match (one tap)'}</span>
-              </button>
-              <button
-                data-focusable="true"
-                data-control="settings-item"
-                onClick={() => void searchOnlineSubtitles?.(subQuery)}
-                disabled={subtitleSearchLoading}
-                className="pc-row flex items-center justify-between text-left disabled:opacity-50"
-              >
-                <span>{subtitleSearchLoading ? 'Searching…' : 'Search Online'}</span>
-              </button>
-              <button
-                data-focusable="true"
-                data-control="settings-item"
-                onClick={() => localSubtitleInputRef.current?.click()}
+                onClick={() => handleMenuChange('quality')} // 👈 Updated
                 className="pc-row flex items-center justify-between text-left"
               >
-                <span>From Device</span>
+                <span>Quality</span>
+                <div className="pc-muted flex items-center">
+                  <span className="mr-1 text-xs">
+                    {qualities.selectedValue === 'auto'
+                      ? 'Auto'
+                      : `${qualities.selectedQuality?.height}p`}
+                  </span>
+                  <ChevronRightIcon className="h-4 w-4" />
+                </div>
               </button>
-            </>
-          )}
 
-          {onlineSubtitleResults && onlineSubtitleResults.length > 0 && (
-            <div className="flex flex-col gap-0.5">
-              {onlineSubtitleResults.map((result: OnlineSubtitleResult) => (
+              {versions.length > 1 && (
                 <button
-                  key={result.downloadId || result.fileId}
                   data-focusable="true"
                   data-control="settings-item"
-                  onClick={() => void pickFromMenu(result)}
-                  className="pc-row flex flex-col items-start text-left"
+                  onClick={() => handleMenuChange('version')}
+                  className="pc-row flex items-center justify-between text-left"
                 >
-                  <span className="truncate text-sm">{result.releaseName}</span>
-                  <span className="pc-muted text-xs uppercase">
-                    {result.kept ? `Kept on by ${result.kept} ${result.kept === 1 ? 'viewer' : 'viewers'} · ` : ''}{result.exactMatch ? '✓ Exact match · ' : ''}{result.language} · {result.source === 'subdl' ? 'SubDL' : result.source === 'gestdown' ? 'Gestdown' : result.source === 'jellyfin' ? 'Jellyfin' : 'OpenSubtitles'}
+                  <span>Version</span>
+                  <div className="pc-muted flex min-w-0 items-center">
+                    <span className="mr-1 truncate text-xs">
+                      {currentVersion?.variantLabel ||
+                        `${versions.length} versions`}
+                    </span>
+                    <ChevronRightIcon className="h-4 w-4 shrink-0" />
+                  </div>
+                </button>
+              )}
+
+              {audioOptions.length > 0 && (
+                <button
+                  data-focusable="true"
+                  data-control="settings-item"
+                  onClick={() => handleMenuChange('audio')} // 👈 Updated
+                  className="pc-row flex items-center justify-between text-left"
+                >
+                  <span>Audio</span>
+                  <div className="pc-muted flex items-center">
+                    <ChevronRightIcon className="h-4 w-4" />
+                  </div>
+                </button>
+              )}
+
+              {typeof AudioContext !== 'undefined' && (
+                <div
+                  role="group"
+                  aria-label="Dialogue boost"
+                  className="px-3 py-2"
+                >
+                  <div className="mb-1 text-sm">Dialogue boost</div>
+                  <div className="flex gap-1">
+                    {dialogueBoostLevels.map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        data-focusable="true"
+                        data-control="settings-item"
+                        aria-pressed={level === dialogueBoost}
+                        data-selected={level === dialogueBoost}
+                        onClick={() =>
+                          setDialogueBoost(
+                            level,
+                            playerRef.current?.el?.querySelector('video, audio')
+                          )
+                        }
+                        className="pc-row flex flex-1 items-center justify-center gap-1 text-sm capitalize"
+                      >
+                        {level === dialogueBoost && (
+                          <CheckIcon aria-hidden="true" className="h-4 w-4" />
+                        )}
+                        {level}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                data-focusable="true"
+                data-control="settings-item"
+                onClick={() => handleMenuChange('subtitles')} // 👈 Updated
+                className="pc-row flex items-center justify-between text-left"
+              >
+                <span>Captions</span>
+                <div className="pc-muted flex items-center">
+                  <span className="mr-1 max-w-44 truncate text-xs">
+                    {captionOptions.selectedTrack?.label || 'Off'}
                   </span>
+                  <ChevronRightIcon className="h-4 w-4" />
+                </div>
+              </button>
+
+              {externalUrl && (
+                <button
+                  data-focusable="true"
+                  data-control="settings-item"
+                  onClick={() => handleMenuChange('external')}
+                  className="pc-row flex items-center justify-between text-left"
+                >
+                  <span>Open in…</span>
+                  <div className="pc-muted flex items-center">
+                    <ExternalLink className="mr-1 h-4 w-4" />
+                    <ChevronRightIcon className="h-4 w-4" />
+                  </div>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* VERSION: the movie's other versions */}
+          {activeSettingsMenu === 'version' && (
+            <div className="flex flex-col space-y-1">
+              <button
+                data-focusable="true"
+                data-control="settings-item"
+                onClick={() => handleMenuChange('main')}
+                className="pc-row mb-1 flex items-center"
+              >
+                <ChevronLeftIcon className="mr-2 h-4 w-4" />
+                <span>Back</span>
+              </button>
+              {versions.map((v) => (
+                <button
+                  key={String(v.id)}
+                  data-focusable="true"
+                  data-control="settings-item"
+                  onClick={() => switchVersion(v)}
+                  className="pc-row flex items-center justify-between text-left"
+                >
+                  <span className="truncate">
+                    {v.variantLabel || String(v.title || v.name || v.id)}
+                  </span>
+                  {String(v.id) === catalogId && (
+                    <CheckIcon className="h-4 w-4 shrink-0" />
+                  )}
+                </button>
+              ))}
+              <p className="text-2xs text-fg-subtle px-3 pt-1 leading-snug">
+                Plays from where you are now.
+              </p>
+            </div>
+          )}
+
+          {/* OPEN IN ANOTHER PLAYER */}
+          {activeSettingsMenu === 'external' && externalUrl && (
+            <div className="flex flex-col space-y-1">
+              <button
+                data-focusable="true"
+                data-control="settings-item"
+                onClick={() => handleMenuChange('main')}
+                className="pc-row mb-1 flex items-center"
+              >
+                <ChevronLeftIcon className="mr-2 h-4 w-4" />
+                <span>Open in…</span>
+              </button>
+              {externalChoices(externalUrl, title).map((c) => (
+                <button
+                  key={c.id}
+                  data-focusable="true"
+                  data-control="settings-item"
+                  onClick={() => void openExternal(c)}
+                  className="pc-row flex items-center text-left"
+                >
+                  <span>{c.label}</span>
+                </button>
+              ))}
+              <p className="text-2xs text-fg-subtle px-3 pt-1 leading-snug">
+                The other player gets this stream only, never your provider's
+                address. Progress there is not saved here.
+              </p>
+            </div>
+          )}
+
+          {/* QUALITY SUBMENU */}
+          {activeSettingsMenu === 'quality' && (
+            <div className="flex flex-col">
+              <button
+                data-focusable="true"
+                data-control="settings-back"
+                onClick={() => handleMenuChange('main')} // 👈 Back ponalum focus reset aagum
+                className="pc-row mb-1 flex items-center"
+              >
+                <ChevronLeftIcon className="mr-1 h-4 w-4" />
+                <span>Back</span>
+              </button>
+              {qualities.map(({ label, value, select }) => (
+                <button
+                  key={value}
+                  data-focusable="true"
+                  data-control="settings-item"
+                  onClick={() => {
+                    select();
+                    setIsSettingsMenuOpen(false);
+                    setFocusedIndex(0);
+                  }}
+                  data-selected={
+                    qualities.selectedValue === value ? 'true' : 'false'
+                  }
+                  className="pc-row flex items-center justify-between text-left"
+                >
+                  <span>{label}</span>
+                  {qualities.selectedValue === value && (
+                    <CheckIcon className="h-4 w-4" />
+                  )}
                 </button>
               ))}
             </div>
           )}
-        </div>
-      )}
 
-      {/* CAST SUBMENU */}
-      {activeSettingsMenu === 'cast' && (
-        <div className="flex flex-col">
-          <GoogleCastButton
-            data-focusable="true"
-            data-control="settings-item"
-            onClick={() => {
-              setIsSettingsMenuOpen(false);
-              setFocusedIndex(0);
-            }}
-            className="pc-row mb-1 flex w-full items-center justify-between text-left"
-          >
-            <div className="flex items-center space-x-2">
-              <FaChromecast className="h-4 w-4 text-accent" />
-              <span>Google Cast (Chromecast)</span>
-            </div>
-          </GoogleCastButton>
-
-          {receivers && receivers.length > 0 ? (
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            receivers.map((receiver: any) => (
+          {/* AUDIO SUBMENU */}
+          {activeSettingsMenu === 'audio' && (
+            <div className="flex flex-col">
               <button
-                key={receiver.id}
+                data-focusable="true"
+                data-control="settings-back"
+                onClick={() => handleMenuChange('main')}
+                className="pc-row mb-1 flex items-center"
+              >
+                <ChevronLeftIcon className="mr-1 h-4 w-4" />
+                <span>Back</span>
+              </button>
+              {audioOptions.map(({ label, value, select }) => (
+                <button
+                  key={value}
+                  data-focusable="true"
+                  data-control="settings-item"
+                  onClick={() => {
+                    select();
+                    setIsSettingsMenuOpen(false);
+                    setFocusedIndex(0);
+                  }}
+                  data-selected={
+                    audioOptions.selectedValue === value ? 'true' : 'false'
+                  }
+                  className="pc-row flex items-center justify-between text-left"
+                >
+                  <span>{label || 'Default'}</span>
+                  {audioOptions.selectedValue === value && (
+                    <CheckIcon className="h-4 w-4" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* CAPTIONS SUBMENU — already-available tracks, plus one clean way to add more */}
+          {activeSettingsMenu === 'subtitles' && (
+            <div className="flex flex-col">
+              <button
+                data-focusable="true"
+                data-control="settings-back"
+                onClick={() => handleMenuChange('main')} // 👈 Back
+                className="pc-row mb-1 flex items-center"
+              >
+                <ChevronLeftIcon className="mr-1 h-4 w-4" />
+                <span>Back</span>
+              </button>
+              {captionOptions.map(
+                ({ label, value, select, track, selected }) => (
+                  <button
+                    key={value}
+                    data-focusable="true"
+                    data-control="settings-item"
+                    onClick={() => {
+                      chooseCaption(track?.id);
+                      if (!selected) select(); // Vidstack's "Off" action toggles when it is already off.
+                      setIsSettingsMenuOpen(false);
+                      setFocusedIndex(0);
+                    }}
+                    data-selected={
+                      captionOptions.selectedValue === value ? 'true' : 'false'
+                    }
+                    className="pc-row flex items-center justify-between text-left"
+                  >
+                    <span>{label}</span>
+                    {captionOptions.selectedValue === value && (
+                      <CheckIcon className="h-4 w-4" />
+                    )}
+                  </button>
+                )
+              )}
+
+              <div
+                role="group"
+                aria-label="Subtitle size"
+                className="border-line-strong border-t px-3 py-2"
+              >
+                <div className="mb-1 text-sm">Subtitle size</div>
+                <div className="flex gap-1">
+                  {subtitleSizes.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      data-focusable="true"
+                      data-control="settings-item"
+                      aria-pressed={size === subtitleSize}
+                      data-selected={size === subtitleSize}
+                      onClick={() => setSubtitleSize(size)}
+                      className="pc-row flex flex-1 items-center justify-center gap-1 text-sm capitalize"
+                    >
+                      {size === subtitleSize && (
+                        <CheckIcon aria-hidden="true" className="h-4 w-4" />
+                      )}
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {liveCaptionsSupported() && (
+                <label className="border-line-strong flex flex-col gap-1 border-t px-3 py-2 text-sm">
+                  Auto-caption model
+                  <select
+                    data-focusable="true"
+                    data-control="settings-item"
+                    className={subField}
+                    value={captionEngine}
+                    onChange={(e) =>
+                      setCaptionEngine(e.target.value as CaptionEngine)
+                    }
+                  >
+                    <option value="nemotron">Nemotron (default)</option>
+                    <option value="moonshine">Moonshine v2</option>
+                  </select>
+                </label>
+              )}
+
+              {!isLiveTv && (
+                <>
+                  {/* Per-title subtitle timing (utils/subtitleDelay.ts), saved on this device */}
+                  <div className="border-line-strong text-fg-soft mt-1 border-t px-3 pt-2 text-xs">
+                    Timing: {formatDelay(subtitleDelay)}
+                  </div>
+                  <div className="flex items-center gap-1 px-2 pt-1 pb-1">
+                    {[
+                      { label: '− 0.25 s', delta: -250 },
+                      { label: '+ 0.25 s', delta: 250 },
+                    ].map(({ label, delta }) => (
+                      <button
+                        key={label}
+                        data-focusable="true"
+                        data-control="settings-item"
+                        onClick={() => setSubtitleDelay(subtitleDelay + delta)}
+                        className="pc-row flex-1 text-center text-sm"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <button
+                      data-focusable="true"
+                      data-control="settings-item"
+                      onClick={() => setSubtitleDelay(0)}
+                      className="pc-row flex-1 text-center text-sm"
+                    >
+                      Reset
+                    </button>
+                  </div>
+
+                  <button
+                    data-focusable="true"
+                    data-control="settings-item"
+                    onClick={() => {
+                      clearSubtitleSearch?.();
+                      handleMenuChange('add-subtitle');
+                    }}
+                    className="pc-row mt-2 flex items-center justify-between text-left font-semibold"
+                  >
+                    <span>+ Add Subtitle</span>
+                    <ChevronRightIcon className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ADD SUBTITLE SUBMENU — VOD only: online search or local file */}
+          {!isLiveTv && activeSettingsMenu === 'add-subtitle' && (
+            <div className="flex flex-col">
+              <button
+                data-focusable="true"
+                data-control="settings-back"
+                onClick={() => {
+                  clearSubtitleSearch?.();
+                  handleMenuChange('subtitles');
+                }}
+                className="pc-row mb-1 flex items-center"
+              >
+                <ChevronLeftIcon className="mr-1 h-4 w-4" />
+                <span>Back</span>
+              </button>
+
+              <input
+                ref={localSubtitleInputRef}
+                type="file"
+                accept=".srt,.vtt"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file)
+                    setPendingTrackId(
+                      (await addLocalSubtitleFile(file)) ?? null
+                    );
+                }}
+              />
+
+              {!onlineSubtitleResults?.length && (
+                <>
+                  <form
+                    className="mb-1 flex flex-col gap-1.5 px-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void searchOnlineSubtitles?.(subQuery);
+                    }}
+                  >
+                    <input
+                      data-focusable="true"
+                      aria-label="Title to search"
+                      placeholder="Title"
+                      value={subQuery.title}
+                      onChange={(e) =>
+                        setSubQuery({ ...subQuery, title: e.target.value })
+                      }
+                      className={subField}
+                    />
+                    <div className="flex gap-1.5">
+                      {isEpisode ? (
+                        <>
+                          <input
+                            data-focusable="true"
+                            aria-label="Season"
+                            placeholder="S"
+                            inputMode="numeric"
+                            value={subQuery.season}
+                            onChange={(e) =>
+                              setSubQuery({
+                                ...subQuery,
+                                season: e.target.value
+                                  .replace(/\D/g, '')
+                                  .slice(0, 4),
+                              })
+                            }
+                            className={subField}
+                          />
+                          <input
+                            data-focusable="true"
+                            aria-label="Episode"
+                            placeholder="E"
+                            inputMode="numeric"
+                            value={subQuery.episode}
+                            onChange={(e) =>
+                              setSubQuery({
+                                ...subQuery,
+                                episode: e.target.value
+                                  .replace(/\D/g, '')
+                                  .slice(0, 4),
+                              })
+                            }
+                            className={subField}
+                          />
+                        </>
+                      ) : (
+                        <input
+                          data-focusable="true"
+                          aria-label="Year"
+                          placeholder="Year"
+                          inputMode="numeric"
+                          value={subQuery.year}
+                          onChange={(e) =>
+                            setSubQuery({
+                              ...subQuery,
+                              year: e.target.value
+                                .replace(/\D/g, '')
+                                .slice(0, 4),
+                            })
+                          }
+                          className={subField}
+                        />
+                      )}
+                      <select
+                        data-focusable="true"
+                        aria-label="Language"
+                        value={subQuery.language}
+                        onChange={(e) =>
+                          setSubQuery({ ...subQuery, language: e.target.value })
+                        }
+                        className={subField}
+                      >
+                        {SUBTITLE_LANGUAGES.map(([code, name]) => (
+                          <option key={code} value={code}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </form>
+                  <button
+                    data-focusable="true"
+                    data-control="settings-item"
+                    onClick={() => void pickFromMenu()}
+                    disabled={subtitleSearchLoading || bestSubtitleLoading}
+                    className="pc-row flex items-center justify-between text-left font-semibold disabled:opacity-50"
+                  >
+                    <span>
+                      {bestSubtitleLoading
+                        ? 'Finding the best match…'
+                        : 'Best match (one tap)'}
+                    </span>
+                  </button>
+                  <button
+                    data-focusable="true"
+                    data-control="settings-item"
+                    onClick={() => void searchOnlineSubtitles?.(subQuery)}
+                    disabled={subtitleSearchLoading}
+                    className="pc-row flex items-center justify-between text-left disabled:opacity-50"
+                  >
+                    <span>
+                      {subtitleSearchLoading ? 'Searching…' : 'Search Online'}
+                    </span>
+                  </button>
+                  <button
+                    data-focusable="true"
+                    data-control="settings-item"
+                    onClick={() => localSubtitleInputRef.current?.click()}
+                    className="pc-row flex items-center justify-between text-left"
+                  >
+                    <span>From Device</span>
+                  </button>
+                </>
+              )}
+
+              {onlineSubtitleResults && onlineSubtitleResults.length > 0 && (
+                <div className="flex flex-col gap-0.5">
+                  {onlineSubtitleResults.map((result: OnlineSubtitleResult) => (
+                    <button
+                      key={result.downloadId || result.fileId}
+                      data-focusable="true"
+                      data-control="settings-item"
+                      onClick={() => void pickFromMenu(result)}
+                      className="pc-row flex flex-col items-start text-left"
+                    >
+                      <span className="truncate text-sm">
+                        {result.releaseName}
+                      </span>
+                      <span className="pc-muted text-xs uppercase">
+                        {result.kept
+                          ? `Kept on by ${result.kept} ${result.kept === 1 ? 'viewer' : 'viewers'} · `
+                          : ''}
+                        {result.exactMatch ? '✓ Exact match · ' : ''}
+                        {result.language} ·{' '}
+                        {result.source === 'subdl'
+                          ? 'SubDL'
+                          : result.source === 'gestdown'
+                            ? 'Gestdown'
+                            : result.source === 'jellyfin'
+                              ? 'Jellyfin'
+                              : 'OpenSubtitles'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* CAST SUBMENU */}
+          {activeSettingsMenu === 'cast' && (
+            <div className="flex flex-col">
+              <GoogleCastButton
                 data-focusable="true"
                 data-control="settings-item"
                 onClick={() => {
-                  handleCast(receiver.id);
                   setIsSettingsMenuOpen(false);
                   setFocusedIndex(0);
                 }}
-                className="pc-row flex items-center justify-between text-left"
+                className="pc-row mb-1 flex w-full items-center justify-between text-left"
               >
-                <span>{receiver.name}</span>
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-center text-sm text-fg-muted">
-              No other local screen apps found
+                <div className="flex items-center space-x-2">
+                  <FaChromecast className="text-accent h-4 w-4" />
+                  <span>Google Cast (Chromecast)</span>
+                </div>
+              </GoogleCastButton>
+
+              {receivers && receivers.length > 0 ? (
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                receivers.map((receiver: any) => (
+                  <button
+                    key={receiver.id}
+                    data-focusable="true"
+                    data-control="settings-item"
+                    onClick={() => {
+                      handleCast(receiver.id);
+                      setIsSettingsMenuOpen(false);
+                      setFocusedIndex(0);
+                    }}
+                    className="pc-row flex items-center justify-between text-left"
+                  >
+                    <span>{receiver.name}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="text-fg-muted px-3 py-2 text-center text-sm">
+                  No other local screen apps found
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
       </div>
-    </div>
     </>
   );
 });

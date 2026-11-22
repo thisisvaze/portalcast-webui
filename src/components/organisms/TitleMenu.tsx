@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Bookmark, BookmarkCheck, Check, EyeOff, Info, Trash2, X } from 'lucide-react';
+import {
+  Bookmark,
+  BookmarkCheck,
+  Check,
+  EyeOff,
+  Info,
+  Trash2,
+} from 'lucide-react';
 import type { MediaItem } from '@/types';
 import type { TitleMenuExtra } from '@/context/TitleMenuContext';
 import { contentIdOf } from '@/utils/contentId';
 import { getMyListIds, setInMyList } from '@/api/endpoints/discover';
 import { setNotInterested, setWatched } from '@/api/endpoints/user';
 import { markHidden, useHiddenTitles } from '@/utils/hiddenTitles';
-import Dialog from '@/components/ui/Dialog';
+import Dialog, { DialogHeader, DialogRow } from '@/components/ui/Dialog';
 
 interface TitleMenuProps {
   item: MediaItem;
@@ -22,17 +29,29 @@ interface TitleMenuProps {
  * same ones) and, on Continue Watching, Remove. A sheet from the bottom on a phone, a small
  * panel in the middle on wider screens (Dialog). Escape or a tap outside closes it.
  */
-const TitleMenu: React.FC<TitleMenuProps> = ({ item, extra, onClose, onChanged }) => {
+const TitleMenu: React.FC<TitleMenuProps> = ({
+  item,
+  extra,
+  onClose,
+  onChanged,
+}) => {
   const id = contentIdOf(item);
   const hidden = useHiddenTitles();
   const [inList, setInList] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
-  const title = String((item as unknown as { cw_show_title?: string }).cw_show_title || item.title || item.name || '');
+  const title = String(
+    (item as unknown as { cw_show_title?: string }).cw_show_title ||
+      item.title ||
+      item.name ||
+      ''
+  );
 
   useEffect(() => {
     if (!id) return;
-    getMyListIds().then((ids) => setInList(ids ? ids.has(id) : null)).catch(() => {});
+    getMyListIds()
+      .then((ids) => setInList(ids ? ids.has(id) : null))
+      .catch(() => {});
   }, [id]);
 
   const run = async (label: string, action: () => Promise<void>) => {
@@ -48,43 +67,33 @@ const TitleMenu: React.FC<TitleMenuProps> = ({ item, extra, onClose, onChanged }
     }
   };
 
-  const Row: React.FC<{ icon: React.ReactNode; label: string; note?: string; onClick: () => void }> = ({ icon, label, note, onClick }) => (
-    <button
-      data-focusable="true"
-      disabled={busy}
-      onClick={onClick}
-      className="flex w-full items-center gap-4 rounded-xl px-4 py-3.5 text-left hover:bg-interaction focus:bg-interaction focus:outline-hidden disabled:opacity-50 [&.focused]:bg-interaction"
-    >
-      <span className="text-fg-soft">{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-semibold text-fg">{label}</span>
-        {note && <span className="block truncate text-xs text-fg-subtle">{note}</span>}
-      </span>
-    </button>
-  );
-
   return (
     <Dialog
       open
       onClose={onClose}
       labelledBy="title-menu-title"
       focusGroup="title-menu"
-      className="max-w-md self-end p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:self-center"
+      className="max-w-md self-end p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:self-center sm:p-4"
     >
-      <div className="flex items-center gap-2 px-3 py-2">
-        <h3 id="title-menu-title" className="min-w-0 flex-1 truncate text-base font-bold text-fg">{title}</h3>
-        <button onClick={onClose} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full text-fg-soft hover:bg-interaction">
-          <X className="h-5 w-5" />
-        </button>
-      </div>
+      <DialogHeader
+        id="title-menu-title"
+        title={<span className="block truncate">{title}</span>}
+        onClose={onClose}
+        className="px-2 pb-2"
+      />
       {done ? (
-        <p className="flex items-center gap-2 px-4 py-6 text-sm font-semibold text-accent"><Check className="h-4 w-4" /> {done}</p>
+        <p className="text-accent flex items-center gap-2 px-3 py-5 text-sm font-semibold">
+          <Check className="h-4 w-4" /> {done}
+        </p>
       ) : !id ? (
-        <p className="px-4 py-6 text-sm text-fg-muted">Nothing to do for this one.</p>
+        <p className="text-fg-muted px-3 py-5 text-sm">
+          Nothing to do for this one.
+        </p>
       ) : (
-        <div className="pb-1">
+        <div className="space-y-0.5 border-t border-[var(--ui-dialog-divider)] pt-2">
           {extra?.onDetails && (
-            <Row
+            <DialogRow
+              disabled={busy}
               icon={<Info className="h-5 w-5" />}
               label="Details"
               note="Its page: episodes, cast, more like this"
@@ -95,39 +104,71 @@ const TitleMenu: React.FC<TitleMenuProps> = ({ item, extra, onClose, onChanged }
             />
           )}
           {inList !== null && (
-            <Row
-              icon={inList ? <BookmarkCheck className="h-5 w-5" /> : <Bookmark className="h-5 w-5" />}
+            <DialogRow
+              disabled={busy}
+              icon={
+                inList ? (
+                  <BookmarkCheck className="h-5 w-5" />
+                ) : (
+                  <Bookmark className="h-5 w-5" />
+                )
+              }
               label={inList ? 'Remove from My List' : 'Add to My List'}
-              onClick={() => void run(inList ? 'Removed from My List' : 'Added to My List', () => setInMyList(id, !inList))}
+              onClick={() =>
+                void run(
+                  inList ? 'Removed from My List' : 'Added to My List',
+                  () => setInMyList(id, !inList)
+                )
+              }
             />
           )}
-          <Row
+          <DialogRow
+            disabled={busy}
             icon={<Check className="h-5 w-5" />}
             label="Mark as watched"
             note="Leaves Continue Watching and your suggestions"
-            onClick={() => void run('Marked as watched', () => setWatched(id, true))}
+            onClick={() =>
+              void run('Marked as watched', () => setWatched(id, true))
+            }
           />
           {hidden.has(id) ? (
-            <Row
+            <DialogRow
+              disabled={busy}
               icon={<EyeOff className="h-5 w-5" />}
               label="Show on Home again"
               note="You said Not interested"
-              onClick={() => void run('It can show on Home again', async () => { await setNotInterested(id, false); markHidden(id, false); })}
+              onClick={() =>
+                void run('It can show on Home again', async () => {
+                  await setNotInterested(id, false);
+                  markHidden(id, false);
+                })
+              }
             />
           ) : (
-            <Row
+            <DialogRow
+              disabled={busy}
               icon={<EyeOff className="h-5 w-5" />}
               label="Not interested"
               note="Keeps it off your Home rows (undo in My List)"
-              onClick={() => void run("Got it: you won't see it on Home", async () => { await setNotInterested(id, true); markHidden(id, true); })}
+              onClick={() =>
+                void run("Got it: you won't see it on Home", async () => {
+                  await setNotInterested(id, true);
+                  markHidden(id, true);
+                })
+              }
             />
           )}
           {extra?.onRemoveFromContinue && (
-            <Row
+            <DialogRow
+              disabled={busy}
               icon={<Trash2 className="h-5 w-5" />}
               label="Remove from Continue Watching"
               note="Your place in it is forgotten"
-              onClick={() => void run('Removed from Continue Watching', async () => { extra.onRemoveFromContinue!(); })}
+              onClick={() =>
+                void run('Removed from Continue Watching', async () => {
+                  extra.onRemoveFromContinue!();
+                })
+              }
             />
           )}
         </div>

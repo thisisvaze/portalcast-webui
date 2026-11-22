@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Check } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import Dialog from '@/components/ui/Dialog';
+import Dialog, { DialogFooter, DialogHeader } from '@/components/ui/Dialog';
 import { THEMES, useTheme } from './theme';
 import { useChooseTheme } from './accountTheme';
 
@@ -38,12 +38,12 @@ export default function ThemePicker({
       className="max-w-2xl text-left"
       focusGroup="theme-picker"
     >
-      <h2 id="theme-picker-title" className="text-fg text-xl font-semibold">
-        Theme
-      </h2>
-      <p className="text-fg-muted mt-1 text-sm">
-        How PortalCast looks on this device.
-      </p>
+      <DialogHeader
+        id="theme-picker-title"
+        title="Theme"
+        subtitle="How PortalCast looks on this device."
+        onClose={onClose}
+      />
 
       <div
         role="radiogroup"
@@ -63,7 +63,9 @@ export default function ThemePicker({
               onClick={() => choose(t.id)}
               className={`focus-visible:ring-focus grid min-w-0 grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 rounded-xl p-2 text-left transition-colors hover:bg-white/5 focus:outline-hidden focus-visible:ring-2 sm:block ${on ? 'bg-white/5' : ''}`}
             >
-              <span className="row-span-2"><ThemePreview swatch={t.swatch} selected={on} /></span>
+              <span className="row-span-2">
+                <ThemePreview swatch={t.swatch} selected={on} />
+              </span>
               <span className="flex items-center justify-between gap-2 px-1 sm:mt-3">
                 <span className="text-fg font-semibold">{t.label}</span>
                 {on && (
@@ -80,11 +82,11 @@ export default function ThemePicker({
         })}
       </div>
 
-      <div className="mt-5 flex justify-end">
+      <DialogFooter>
         <Button variant="primary" onClick={onClose}>
           Done
         </Button>
-      </div>
+      </DialogFooter>
     </Dialog>
   );
 }
