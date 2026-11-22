@@ -38,6 +38,15 @@ media-provider {
   visibility: hidden;
 }
 
+/* Keep the frozen video frame underneath visible until the replacement stream is actively playing. */
+[data-frozen-frame='true'] media-player,
+[data-frozen-frame='true'] [data-media-player] {
+  background-color: transparent;
+}
+[data-frozen-frame='true'] .media-provider:not([data-playing]) video {
+  visibility: hidden;
+}
+
 .media-captions {
   /* This ensures the subtitles don't touch the absolute edges of the screen */
   padding: 0 5%;

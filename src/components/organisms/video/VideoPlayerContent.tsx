@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { applyDialogueBoost } from '@/utils/dialogueBoost';
 import {
   MediaPlayer,
@@ -71,9 +71,9 @@ const VideoPlayerContent: React.FC = () => {
     previewChannelInfo,
     channelInfo,
     channelGroups,
-    retryCount,
     reloadTrigger,
     isRecovering,
+    recoveryFailed,
     isTizen,
     streamError,
 
@@ -180,6 +180,56 @@ const VideoPlayerContent: React.FC = () => {
   const tvChannelListRef = useRef<TvChannelListRef>(null);
   const episodeOverlayRef = useRef<EpisodeOverlayRef>(null);
   const speedBannerRef = useRef<HTMLDivElement>(null);
+  const freezeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [hasFrozenFrame, setHasFrozenFrame] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+
+  const captureFrozenFrame = useCallback(() => {
+    const video = playerContainerRef.current?.querySelector('video') as HTMLVideoElement | null;
+    const canvas = freezeCanvasRef.current;
+    if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      return;
+    }
+    try {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setHasFrozenFrame(true);
+    } catch {
+      // Ignore canvas capture errors on unsupported surfaces.
+    }
+  }, [playerContainerRef]);
+
+  const clearFrozenFrame = useCallback(() => {
+    setHasFrozenFrame(false);
+    setReconnecting(false);
+    const canvas = freezeCanvasRef.current;
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      const ctx = canvas.getContext('2d');
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }, []);
+
+  // Freeze the current decoded frame synchronously when recovery starts so remounting
+  // the player or swapping the stream URL never flashes an empty/black screen.
+  useLayoutEffect(() => {
+    if (!isRecovering) return;
+    captureFrozenFrame();
+    setReconnecting(true);
+  }, [isRecovering, captureFrozenFrame]);
+
+  useEffect(() => {
+    if (recoveryFailed || streamError) {
+      setReconnecting(false);
+    }
+  }, [recoveryFailed, streamError]);
+
+  useEffect(() => {
+    clearFrozenFrame();
+  }, [itemId, contentType, clearFrozenFrame]);
+
   const lastCaptionTrackKeyRef = useRef<string | null>(null);
   const activeManualSubIdRef = useRef<string | null>(null);
 
@@ -386,6 +436,7 @@ const VideoPlayerContent: React.FC = () => {
     >
       <div
         ref={playerContainerRef}
+        data-frozen-frame={hasFrozenFrame ? 'true' : undefined}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => {
           setIsTooltipVisible(false);
@@ -394,9 +445,15 @@ const VideoPlayerContent: React.FC = () => {
         }}
         className={`group relative h-full w-full overflow-hidden ${!cursorVisible && !controlsVisible ? 'cursor-none' : ''}`}
       >
+        <canvas
+          ref={freezeCanvasRef}
+          aria-hidden="true"
+          style={{ objectFit: fitMode }}
+          className={`pointer-events-none absolute inset-0 z-0 h-full w-full bg-black ${hasFrozenFrame ? 'opacity-100' : 'opacity-0'}`}
+        />
         <MediaPlayer
           key={playerKey}
-          className="media-provider h-full w-full"
+          className="media-provider relative z-10 h-full w-full"
           data-subtitle-size={subtitleSize}
           title={
             item?.title || seriesItem?.title || channelInfo?.name || 'Video'
@@ -418,6 +475,8 @@ const VideoPlayerContent: React.FC = () => {
             handleCanPlay();
             void applyDialogueBoost(playerRef.current?.el?.querySelector('video, audio'));
           }}
+          onPlaying={clearFrozenFrame}
+          onAutoPlayFail={clearFrozenFrame}
           volume={audio.volume}
           muted={audio.muted}
           onVolumeChange={audio.onVolumeChange}
@@ -556,27 +615,7 @@ const VideoPlayerContent: React.FC = () => {
               </div>
             )}
 
-          {isRecovering && (
-            <div className="absolute z-50 flex h-full w-full flex-col items-center justify-center bg-page/90 text-fg backdrop-blur-md">
-              <ActivityIndicator className="mb-6 text-4xl text-accent" />
-              <div className="flex flex-col items-center space-y-2 text-center">
-                <div className="text-2xl font-bold tracking-wider text-accent">
-                  Connecting...
-                </div>
-                <div className="text-sm font-medium tracking-wide transition-colors duration-300">
-                  {retryCount > 0 ? (
-                    <span className="text-amber-400/90">
-                      Retrying connection ({retryCount})...
-                    </span>
-                  ) : (
-                    <span className="text-fg-muted">
-                      Establishing secure stream
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Recovery keeps the last video frame frozen via freezeCanvasRef + subtle indicator below. */}
 
           {streamError && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-black pointer-events-none">
@@ -640,8 +679,20 @@ const VideoPlayerContent: React.FC = () => {
             <span className="text-yellow-500 text-xs font-bold tracking-wider uppercase">2x Speed Active</span>
           </div>
 
-          <BufferingOverlay />
+          <BufferingOverlay hidden={reconnecting} />
         </MediaPlayer>
+        {reconnecting && !streamError && !showChannelList && !showEpisodeList && (
+          <div
+            aria-live="polite"
+            aria-label="Reconnecting"
+            data-ui="reconnecting-indicator"
+            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 backdrop-blur-xs">
+              <ActivityIndicator className="text-lg text-white/85" />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

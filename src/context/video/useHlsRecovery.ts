@@ -58,6 +58,7 @@ export function useHlsRecovery({
   const [retryCount, setRetryCount] = useState(0);
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const [isRecovering, setIsRecovering] = useState(false);
+  const [recoveryFailed, setRecoveryFailed] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
   const retryCountRef = useRef(retryCount);
@@ -102,6 +103,7 @@ export function useHlsRecovery({
     setStreamError(null);
     setRetryCount(0);
     setIsRecovering(false);
+    setRecoveryFailed(false);
   }, [itemId, contentType, clearRetryTimer]);
 
   const currentPlaybackTime = useCallback((): number | undefined => {
@@ -149,6 +151,7 @@ export function useHlsRecovery({
     refreshCountRef.current = 0;
     handledFatalAtRef.current = 0;
     setRetryCount(0);
+    setRecoveryFailed(false);
     resetRecoveryState();
   }, [contentType, currentPlaybackTime, resetRecoveryState]);
 
@@ -161,6 +164,7 @@ export function useHlsRecovery({
       refreshInFlightRef.current = true;
       isRetrying.current = true;
       hadErrorsRef.current = true;
+      setRecoveryFailed(false);
       setIsRecovering(true);
 
       const attempt = refreshCountRef.current + 1;
@@ -285,6 +289,7 @@ export function useHlsRecovery({
         currentTime: resumeAt,
       });
       setIsRecovering(false);
+      setRecoveryFailed(true);
       toast.error(`Stream access rejected by provider (${status ?? 403}). Please try again shortly.`);
       return false;
     },
@@ -376,6 +381,7 @@ export function useHlsRecovery({
               handledFatalAtRef.current = Date.now();
               setStreamError('Channel is not available 404 status');
               setIsRecovering(false);
+              setRecoveryFailed(true);
               logConnectionEvent({
                 source: 'player',
                 event: 'stream-recovery',
@@ -404,6 +410,7 @@ export function useHlsRecovery({
                 // Ignore stopLoad errors.
               }
               setIsRecovering(false);
+              setRecoveryFailed(true);
               logConnectionEvent({
                 source: 'player',
                 event: 'stream-recovery',
@@ -559,6 +566,7 @@ export function useHlsRecovery({
           url: streamUrlRef.current || undefined,
         });
         setIsRecovering(false);
+        setRecoveryFailed(true);
         toast.error(`Stream access rejected by provider (${status}). Please try again shortly.`);
         return;
       }
@@ -609,6 +617,7 @@ export function useHlsRecovery({
         if (contentType === 'tv') {
           setStreamError('Channel is not available 404 status');
           setIsRecovering(false);
+          setRecoveryFailed(true);
           logConnectionEvent({
             source: 'player',
             event: 'stream-recovery',
@@ -637,6 +646,7 @@ export function useHlsRecovery({
           currentTime: currentPlaybackTime(),
           url: streamUrlRef.current || undefined,
         });
+        setRecoveryFailed(true);
         toast.error('Stream error. Please try another source.');
         return;
       }
@@ -646,6 +656,7 @@ export function useHlsRecovery({
         const nextRetry = currentRetries + 1;
         const delayMs = Math.min(1000 * Math.pow(2, currentRetries), 5000);
         isRetrying.current = true;
+        setRecoveryFailed(false);
         setIsRecovering(true);
         logConnectionEvent({
           source: 'player',
@@ -684,6 +695,7 @@ export function useHlsRecovery({
         });
         toast.error('Failed to load stream after multiple attempts');
         setIsRecovering(false);
+        setRecoveryFailed(true);
       }
     },
     [clearRetryTimer, contentType, currentPlaybackTime, playerRef, triggerUrlRefresh]
@@ -693,6 +705,7 @@ export function useHlsRecovery({
     retryCount,
     reloadTrigger,
     isRecovering,
+    recoveryFailed,
     streamError,
     setStreamError,
     setRetryCount,

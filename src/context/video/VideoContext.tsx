@@ -185,6 +185,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
     retryCount,
     reloadTrigger,
     isRecovering,
+    recoveryFailed,
     streamError,
     setStreamError,
     setReloadTrigger,
@@ -394,6 +395,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       retryCount,
       reloadTrigger,
       isRecovering,
+      recoveryFailed,
       isTizen,
       streamError,
 
@@ -495,6 +497,7 @@ export const VideoProvider: React.FC<VideoProviderProps> = ({
       retryCount,
       reloadTrigger,
       isRecovering,
+      recoveryFailed,
       isTizen,
       streamError,
       streamUrl,

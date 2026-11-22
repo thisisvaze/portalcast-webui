@@ -45,6 +45,7 @@ export interface VideoContextType {
   retryCount: number;
   reloadTrigger: number;
   isRecovering: boolean;
+  recoveryFailed: boolean;
   isTizen: boolean;
   streamError: string | null;
 
